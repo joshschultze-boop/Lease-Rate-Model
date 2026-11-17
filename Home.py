@@ -4,7 +4,9 @@
 # This page:
 #   1. Uploads an Excel file and shows a preview
 #   2. Lets the user type in new entries
-#   3. Links to the Clean Data page (pages/1_Clean_Data.py)
+#   3. Links to the other pages:
+#        pages/1_Clean_Data.py  -> cleans the comp sheet and downloads it as Excel
+#        pages/2_Preprocess.py  -> turns a cleaned sheet into a CSV for the model
 
 from datetime import date
 from io import BytesIO
@@ -15,7 +17,7 @@ import streamlit as st
 from app_helpers import ALL_TEMPLATE_COLUMNS, OPTIONAL_COLUMNS, REQUIRED_COLUMNS
 from cleaning_script_functions import STATE_FIPS_TO_ABBR
 
-st.set_page_config(page_title="Lease Comps Cleaner", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="Lease Comps", page_icon="🏗️", layout="wide")
 
 
 # ---------------------------------------------------------------------
@@ -74,8 +76,11 @@ def entry_boxes(columns, required):
 # Page
 # ---------------------------------------------------------------------
 
-st.title("🏗️ Lease Comps Cleaner")
-st.write("Upload your comps file, add any new entries, then open **Clean Data** to clean and download it.")
+st.title("🏗️ Lease Comps")
+st.write(
+    "Upload your comp sheet and add any new entries here. Then open **Clean Data** to clean it, "
+    "and **Preprocess** to turn the cleaned sheet into a CSV for the model."
+)
 
 
 # ---------------------------------------------------------------------
@@ -161,8 +166,13 @@ if new_entries:
 
 
 # ---------------------------------------------------------------------
-# 3. Go to the cleaning page
+# 3. Next steps
 # ---------------------------------------------------------------------
 
-st.header("3. Clean the data")
-st.page_link("pages/1_Clean_Data.py", label="Open Clean Data", icon="🧹")
+st.header("3. Next steps")
+
+st.page_link("pages/1_Clean_Data.py", label="Clean Data", icon="🧹")
+st.caption("Adds your new entries, runs the cleaning steps you choose, and downloads the cleaned Excel file.")
+
+st.page_link("pages/2_Preprocess.py", label="Preprocess", icon="📊")
+st.caption("Upload a cleaned sheet, choose the preprocessing steps, and download a CSV for the model.")
