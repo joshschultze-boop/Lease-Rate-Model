@@ -4,6 +4,9 @@
 #   2. Runs the chosen preprocessing steps IN A FIXED ORDER when you click Run,
 #      so the data is ready for the model
 #   3. Downloads the result as a CSV, with a preview of exactly which columns are saved
+#
+# Tick "Test data with no Monthly Rent" for new properties you want to predict rent for.
+# The same steps run, minus the rent parts, so the CSV matches the training CSV's format.
 
 from io import BytesIO
 
@@ -53,8 +56,10 @@ EPOCH = pd.Timestamp("1950-01-01")  # Dates become "days since" this date.
 
 TARGET_COLUMNS = ["Monthly Rent"]
 
-# Only these columns are read from the file.
-MODEL_COLUMNS = CATEGORICAL_COLUMNS + NUMERICAL_COLUMNS + DATE_COLUMNS + TARGET_COLUMNS
+# Only these columns are read from the file, and they always come out in this order,
+# no matter how the file is arranged. That keeps training and test CSVs lined up.
+PREDICTIVE_COLUMNS = CATEGORICAL_COLUMNS + NUMERICAL_COLUMNS + DATE_COLUMNS
+MODEL_COLUMNS = PREDICTIVE_COLUMNS + TARGET_COLUMNS
 
 # Rows that are blank (or "unknown") in any of these are removed.
 REQUIRED_COLUMNS = [
@@ -138,11 +143,23 @@ def run_step(step_name, df, step_function, **arguments):
     return new_df
 
 
-def run_chosen_steps(df, chosen_steps, states_to_keep, lease_bcr_maximum, log_method):
-    """Check each step in order. If the user chose it, run it. Returns the finished data."""
+def run_chosen_steps(df, chosen_steps, states_to_keep, lease_bcr_maximum, log_method, has_rent):
+    """
+    Check each step in order. If the user chose it, run it. Returns the finished data.
+    has_rent=False is for test data with no Monthly Rent: every step runs the same way,
+    except the parts that use Monthly Rent.
+    """
+    # Test data with no rent: leave Monthly Rent out of rounding (step 11) and logs (step 14).
+    if has_rent:
+        columns_to_round = ROUND_COLUMNS
+        columns_to_log = LOG_COLUMNS
+    else:
+        columns_to_round = [column for column in ROUND_COLUMNS if column not in TARGET_COLUMNS]
+        columns_to_log = [column for column in LOG_COLUMNS if column not in TARGET_COLUMNS]
 
     # 1. Rent must be a number before rows with $0 rent can be removed (step 8).
-    if CLEAN_TARGET in chosen_steps:
+    #    Skipped for test data with no rent.
+    if CLEAN_TARGET in chosen_steps and has_rent:
         df = run_step(CLEAN_TARGET, df, clean_target_columns, target_columns=TARGET_COLUMNS)
 
     # 2-4. Combine columns. This runs BEFORE step 5 (same as your script), so a combined
@@ -177,13 +194,13 @@ def run_chosen_steps(df, chosen_steps, states_to_keep, lease_bcr_maximum, log_me
         df = run_step(LEASE_LENGTH_UNKNOWN, df, add_unknown_indicator,
                       columns="Lease Length (Months)", new_column="Lease Length Unknown")
 
-    # 8. Remove rows with $0 or blank rent, rows from states not being kept,
-    #    and rows that are blank or "unknown" in a required column.
+    # 8. Remove rows with $0 or blank rent (only when there is rent), rows from states
+    #    not being kept, and rows that are blank or "unknown" in a required column.
     if REMOVE_ROWS in chosen_steps:
-        exclude_values = {
-            "Monthly Rent": [0, None],
-            "State": [state for state in ALL_STATES if state not in states_to_keep],
-        }
+        exclude_values = {}
+        if has_rent:
+            exclude_values["Monthly Rent"] = [0, None]
+        exclude_values["State"] = [state for state in ALL_STATES if state not in states_to_keep]
         df = run_step(REMOVE_ROWS, df, clean_dataframe,
                       exclude_values=exclude_values,
                       required_columns=REQUIRED_COLUMNS)
@@ -200,7 +217,7 @@ def run_chosen_steps(df, chosen_steps, states_to_keep, lease_bcr_maximum, log_me
 
     # 11. Round to 2 decimals.
     if ROUND in chosen_steps:
-        df = run_step(ROUND, df, round_columns, columns=ROUND_COLUMNS, decimals=2)
+        df = run_step(ROUND, df, round_columns, columns=columns_to_round, decimals=2)
 
     # 12. Ratios run BEFORE step 13, so an unknown building size gives a blank ratio, not 0.
     if RATIOS in chosen_steps:
@@ -212,7 +229,7 @@ def run_chosen_steps(df, chosen_steps, states_to_keep, lease_bcr_maximum, log_me
 
     # 14. Adds new columns named like "Monthly Rent_log1p". The original columns stay.
     if LOG_TRANSFORMS in chosen_steps:
-        df = run_step(LOG_TRANSFORMS, df, add_log_transforms, columns=LOG_COLUMNS, method=log_method)
+        df = run_step(LOG_TRANSFORMS, df, add_log_transforms, columns=columns_to_log, method=log_method)
 
     return df
 
@@ -240,6 +257,18 @@ st.write("Turn a cleaned comp sheet into a CSV that's ready for the predictive m
 
 st.header("1. Upload the cleaned file")
 
+no_rent = st.checkbox("Test data with no Monthly Rent (new properties to predict rent for)")
+has_rent = not no_rent
+
+if no_rent:
+    st.caption(
+        "Monthly Rent isn't needed. The rent conversion step is skipped, rows aren't removed for "
+        "blank rent, and rounding and log columns leave Monthly Rent out. Everything else runs "
+        "exactly as it does for training data, so the CSV has the same columns minus the rent columns."
+    )
+else:
+    st.caption("Leave this unticked for comps that have rent, including a test set you hold back to score a model.")
+
 uploaded_file = st.file_uploader("Cleaned Excel file (.xlsx)", type=["xlsx"])
 if uploaded_file is None:
     st.info("Upload a cleaned file to continue. You can make one on the Clean Data page.")
@@ -252,8 +281,9 @@ sheet = st.selectbox("Sheet to use", sheet_names)
 data = pd.read_excel(BytesIO(file_bytes), sheet_name=sheet)
 data.columns = [str(column).strip() for column in data.columns]
 
-# The file must have every column the model uses.
-missing_columns = [column for column in MODEL_COLUMNS if column not in data.columns]
+# The file must have every column the model uses (Monthly Rent only when there is rent).
+columns_needed = MODEL_COLUMNS if has_rent else PREDICTIVE_COLUMNS
+missing_columns = [column for column in columns_needed if column not in data.columns]
 if missing_columns:
     st.error(
         "This file is missing columns the preprocessing needs: " + ", ".join(missing_columns)
@@ -261,9 +291,9 @@ if missing_columns:
     )
     st.stop()
 
-# Keep only the model columns, in the same order as the file (like usecols in your script).
-data = data[[column for column in data.columns if column in MODEL_COLUMNS]]
-st.caption(f"{len(data)} rows. The {len(MODEL_COLUMNS)} columns the model uses will be loaded.")
+# Keep only the model columns, in the fixed order from SETTINGS.
+data = data[columns_needed]
+st.caption(f"{len(data)} rows. The {len(columns_needed)} columns the model uses will be loaded.")
 
 
 # --- 2. Choose steps ---
@@ -273,6 +303,8 @@ chosen_steps = st.multiselect("Preprocessing steps", ALL_STEPS, default=ALL_STEP
 
 # Put the chosen steps in run order, no matter what order they were picked in.
 steps_in_order = [step for step in ALL_STEPS if step in chosen_steps]
+if no_rent:
+    steps_in_order = [step for step in steps_in_order if step != CLEAN_TARGET]
 
 if steps_in_order:
     st.write("**These steps will run in this order:**")
@@ -297,7 +329,8 @@ if REMOVE_ROWS in chosen_steps and not states_to_keep:
 # --- 3. Run and download ---
 
 st.header("3. Run and download")
-csv_name = st.text_input("Name for the CSV file", value="preprocessed").strip()
+default_csv_name = "preprocessed_test" if no_rent else "preprocessed"
+csv_name = st.text_input("Name for the CSV file", value=default_csv_name).strip()
 
 if st.button("Run preprocessing", type="primary", disabled=not steps_in_order):
     if not csv_name:
@@ -305,12 +338,13 @@ if st.button("Run preprocessing", type="primary", disabled=not steps_in_order):
         st.stop()
 
     with st.spinner("Preprocessing..."):
-        output = run_chosen_steps(data, chosen_steps, states_to_keep, lease_bcr_maximum, log_method)
+        output = run_chosen_steps(data, chosen_steps, states_to_keep, lease_bcr_maximum, log_method, has_rent)
 
     # Save the result in memory so the download and preview stay after the page refreshes.
     st.session_state["preprocessed_data"] = output
     st.session_state["preprocessed_csv_name"] = csv_name.removesuffix(".csv") + ".csv"
     st.session_state["preprocess_report"] = report
+    st.session_state["preprocess_mode"] = "test data, no rent" if no_rent else "data with rent"
 
 if "preprocessed_data" in st.session_state:
     output = st.session_state["preprocessed_data"]
@@ -334,7 +368,8 @@ if "preprocessed_data" in st.session_state:
 
     st.header("4. Preview of the CSV")
     st.caption(
-        f"{len(output)} rows and {len(output.columns)} columns, from the last run. "
+        f"{len(output)} rows and {len(output.columns)} columns, from the last run "
+        f"({st.session_state['preprocess_mode']}). "
         "Change a step or setting? Click Run again to update."
     )
 
