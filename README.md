@@ -1,6 +1,6 @@
-# Lease Comps Cleaner
+# Lease Comps
 
-A Streamlit app that cleans lease comp spreadsheets.
+A Streamlit app that cleans lease comp spreadsheets and prepares them for a predictive model.
 
 Comp sheets are uploaded in the browser each time the app is used. They are only
 held in memory and in a temporary copy while cleaning, and are never saved to this
@@ -11,9 +11,14 @@ repository. The `.gitignore` file blocks spreadsheets from being committed by ac
 | File | What it is |
 | --- | --- |
 | `Home.py` | Home page: upload a comp sheet and add new entries |
-| `pages/1_Clean_Data.py` | Choose cleaning steps, run them, and download the result |
-| `app_helpers.py` | New-entry template columns and the function that adds entries to the sheet |
+| `pages/1_Clean_Data.py` | Choose cleaning steps, run them, and download the cleaned Excel file |
+| `pages/2_Preprocess.py` | Upload a cleaned sheet, choose preprocessing steps, preview the output columns, and download a CSV for the model |
+| `pages/3_Test_Data.py` | Upload new properties with no rent; cleans and preprocesses them the same way and keeps the result in memory for the models |
+| `cleaning_steps.py` | The cleaning steps, their settings, and their order (used by Clean Data and Test Data) |
+| `preprocessing_steps.py` | The preprocessing steps, their settings, and their order (used by Preprocess and Test Data) |
 | `cleaning_script_functions.py` | The cleaning functions |
+| `preprocessing_functions.py` | The preprocessing functions |
+| `app_helpers.py` | New-entry template columns and the function that adds entries to the sheet |
 | `data/list1_2023.xlsx` | Census CBSA delineation file (matched by county) |
 | `data/list2_2023.xlsx` | Census principal cities file (matched by city) |
 | `data/tl_2025_us_primaryroads/` | Census 2025 TIGER/Line primary roads, for distance to highway |

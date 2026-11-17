@@ -30,7 +30,7 @@ REQUIRED_COLUMNS = {
     "Lease Type": "text",
     "Lease Start": "date",
     "Monthly Rent": "number",
-    "NNN": "number",
+    "NNN": "text",  # the model treats NNN as a category, not a number
 }
 
 OPTIONAL_COLUMNS = {

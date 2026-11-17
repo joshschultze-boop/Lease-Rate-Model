@@ -7,6 +7,7 @@
 #   3. Links to the other pages:
 #        pages/1_Clean_Data.py  -> cleans the comp sheet and downloads it as Excel
 #        pages/2_Preprocess.py  -> turns a cleaned sheet into a CSV for the model
+#        pages/3_Test_Data.py   -> cleans and preprocesses new properties (no rent) for the models
 
 from datetime import date
 from io import BytesIO
@@ -176,3 +177,9 @@ st.caption("Adds your new entries, runs the cleaning steps you choose, and downl
 
 st.page_link("pages/2_Preprocess.py", label="Preprocess", icon="📊")
 st.caption("Upload a cleaned sheet, choose the preprocessing steps, and download a CSV for the model.")
+
+st.page_link("pages/3_Test_Data.py", label="Test Data", icon="🧪")
+st.caption(
+    "Upload new properties with no rent. They're cleaned and preprocessed the same way as your "
+    "training data and kept in memory for the models."
+)
