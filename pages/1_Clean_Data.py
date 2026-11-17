@@ -324,3 +324,5 @@ if "cleaned_file_bytes" in st.session_state:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         type="primary",
     )
+
+    st.page_link("pages/2_Preprocess.py", label="Next: upload this file on the Preprocess page", icon="📊")
