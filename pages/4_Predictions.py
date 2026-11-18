@@ -9,6 +9,8 @@
 # Preparing the data and fitting happen in models/shared.py, the same way for every model.
 # The models are listed in models/__init__.py. Adding a model doesn't change this page.
 
+import hashlib
+
 import pandas as pd
 import streamlit as st
 
@@ -36,22 +38,95 @@ FROM_TEST_DATA_PAGE = "Test data from the Test Data page"
 UPLOAD_TEST_CSV = "Upload a test CSV"
 
 
+# Streamlit forgets a box's value while the box isn't shown (another model is picked, or another page is
+# open), so every parameter value is also kept in st.session_state["saved_parameters"], keyed by
+# "<model>: <parameter>", and put back when the box is shown again.
+
+def saved_parameters():
+    return st.session_state.setdefault("saved_parameters", {})
+
+
 def parameter_box(model_name, name, spec):
     """One parameter box, built from an entry in the model file's PARAMETERS."""
-    key, label, help_text = f"{model_name}: {name}", spec["label"], spec.get("help")  # each model keeps its own values
-    if spec["type"] == "int":
-        return int(st.number_input(label, value=int(spec["default"]), step=int(spec.get("step", 1)),
-                                   min_value=spec.get("min"), max_value=spec.get("max"), help=help_text, key=key))
-    if spec["type"] == "float":
-        as_float = lambda value: None if value is None else float(value)
-        return float(st.number_input(label, value=float(spec["default"]), step=float(spec.get("step", 0.01)),
-                                     min_value=as_float(spec.get("min")), max_value=as_float(spec.get("max")),
-                                     format=spec.get("format", "%.4f"), help=help_text, key=key))
-    if spec["type"] == "bool":
-        return st.checkbox(label, value=bool(spec["default"]), help=help_text, key=key)
-    if spec["type"] == "choice":
-        return st.selectbox(label, spec["options"], index=spec["options"].index(spec["default"]), help=help_text, key=key)
-    raise ValueError(f"Unknown parameter type for {name}: {spec['type']}")
+    key, label, help_text, kind = f"{model_name}: {name}", spec["label"], spec.get("help"), spec["type"]
+    if key not in st.session_state and key in saved_parameters():
+        st.session_state[key] = saved_parameters()[key]
+    # A box with a saved value starts from it; otherwise it starts from the model file's default.
+    start = {} if key in st.session_state else (
+        {"index": spec["options"].index(spec["default"])} if kind == "choice" else {"value": spec["default"]})
+
+    if kind == "int":
+        value = int(st.number_input(label, step=int(spec.get("step", 1)), min_value=spec.get("min"),
+                                    max_value=spec.get("max"), help=help_text, key=key, **start))
+    elif kind == "float":
+        as_float = lambda number: None if number is None else float(number)
+        start = {"value": float(start["value"])} if start else {}
+        value = float(st.number_input(label, step=float(spec.get("step", 0.01)), min_value=as_float(spec.get("min")),
+                                      max_value=as_float(spec.get("max")), format=spec.get("format", "%.4f"),
+                                      help=help_text, key=key, **start))
+    elif kind == "bool":
+        value = st.checkbox(label, help=help_text, key=key, **start)
+    elif kind == "choice":
+        value = st.selectbox(label, spec["options"], help=help_text, key=key, **start)
+    else:
+        raise ValueError(f"Unknown parameter type for {name}: {kind}")
+    saved_parameters()[key] = value
+    return value
+
+
+def table_box(model_name, name, spec, predictor_columns):
+    """
+    An editable table parameter (one row per item, e.g. a spline or a layer), built from the model
+    file's PARAMETERS entry. Returns (rows as a list of dictionaries, a problem message or None).
+    predictor_columns are the choices for "predictor" columns (the numerical and date predictors).
+    """
+    columns = spec["columns"]
+    config = {}
+    for column, column_spec in columns.items():
+        kind, label, help_text = column_spec["type"], column_spec["label"], column_spec.get("help")
+        if kind in ("int", "float"):
+            config[column] = st.column_config.NumberColumn(
+                label, help=help_text, required=True, min_value=column_spec.get("min"), max_value=column_spec.get("max"),
+                step=1 if kind == "int" else column_spec.get("step"),
+                format=column_spec.get("format", "%d" if kind == "int" else None))
+        elif kind in ("choice", "predictor"):
+            options = column_spec["options"] if kind == "choice" else predictor_columns
+            config[column] = st.column_config.SelectboxColumn(label, options=options, help=help_text, required=True)
+
+    # Start from the saved rows (or the model file's defaults), leaving out any that name a predictor
+    # not chosen in section 2. Those rows come back if the predictor is chosen again.
+    saved_key = f"{model_name}: {name}"
+    starting = saved_parameters().get(saved_key, spec["default"])
+    predictor_keys = [column for column, column_spec in columns.items() if column_spec["type"] == "predictor"]
+    rows = [row for row in starting if all(row[key] in predictor_columns for key in predictor_keys)]
+    left_out = [row for row in starting if row not in rows]
+
+    st.write(f"**{spec['label']}**")
+    if spec.get("help"):
+        st.caption(spec["help"])
+    if left_out:
+        st.caption("Starting rows left out because those columns aren't predictors in section 2: "
+                   + ", ".join(str(row[predictor_keys[0]]) for row in left_out))
+    # The key changes when the starting rows change, so edits are never applied to the wrong rows.
+    starting_rows = hashlib.md5(repr(rows).encode()).hexdigest()[:8]
+    edited = st.data_editor(pd.DataFrame(rows, columns=list(columns)), column_config=config, num_rows="dynamic",
+                            hide_index=True, key=f"{saved_key}: {starting_rows}")
+
+    # Each row as a dictionary with the right types. A new row left completely empty is ignored.
+    result, incomplete = [], 0
+    for row in edited.to_dict("records"):
+        filled = [not pd.isna(value) for value in row.values()]
+        if not any(filled):
+            continue
+        if not all(filled):
+            incomplete += 1
+            continue
+        convert = {"int": int, "float": float}
+        result.append({column: convert.get(columns[column]["type"], str)(value) for column, value in row.items()})
+    if incomplete:
+        return result, f"{spec['label']}: fill in every cell of the incomplete row(s), or delete them."
+    saved_parameters()[saved_key] = result + left_out   # saved only when complete, so half-typed rows stay put
+    return result, None
 
 
 def choose_data_and_model():
@@ -127,15 +202,33 @@ def choose_data_and_model():
     model_name = st.selectbox("Model", list(MODELS))
     model = MODELS[model_name]
     st.caption(model.DESCRIPTION)
-    st.write("**Parameters**")
-    boxes = st.columns(3)
-    parameters = {}
-    for position, (name, spec) in enumerate(model.PARAMETERS.items()):
-        with boxes[position % 3]:
-            parameters[name] = parameter_box(model_name, name, spec)
+    title, reset = st.columns([4, 1])
+    title.write("**Parameters**")
+    if reset.button("Reset to defaults", help="Put this model's parameters back to the values in its model file."):
+        for key in [key for key in saved_parameters() if key.startswith(f"{model_name}: ")]:
+            del saved_parameters()[key]
+        for key in [key for key in st.session_state if isinstance(key, str) and key.startswith(f"{model_name}: ")]:
+            del st.session_state[key]
+        st.rerun()
+    parameters, table_problems, position = {}, [], 0
+    for name, spec in model.PARAMETERS.items():   # in the model file's order
+        if spec["type"] == "table":               # tables use the full width
+            parameters[name], problem = table_box(model_name, name, spec, numerical + dates)
+            table_problems += [problem] if problem else []
+            position = 0
+        else:                                     # other boxes go three to a row
+            if position % 3 == 0:
+                boxes = st.columns(3)
+            with boxes[position % 3]:
+                parameters[name] = parameter_box(model_name, name, spec)
+            position += 1
     with st.expander("Encoding settings (used by every model)"):
         min_frequency = int(st.number_input("Group categories seen fewer than this many times in the training data "
                                             "into \"unknown\"", min_value=1, value=3, step=1))
+    for problem in table_problems:
+        st.error(problem)
+    if table_problems:
+        return None
 
     return {
         "run_clicked": st.button("Fit model and predict", type="primary"),
@@ -187,7 +280,9 @@ def fit_and_save(choices):
         "details": fit["details"],
         "summary": (
             f"From the last run: **{choices['model_name']}** ("
-            + ", ".join(f"{model.PARAMETERS[name]['label']} = {value}" for name, value in choices["parameters"].items())
+            + ", ".join(f"{model.PARAMETERS[name]['label']} = "
+                        + (f"{len(value)} rows" if isinstance(value, list) else f"{value}")
+                        for name, value in choices["parameters"].items())
             + f"). Trained on {fit['training_rows']} rows of {choices['training_name']}"
             + (f" ({fit['skipped_training_rows']} rows with no {target} were skipped)" if fit["skipped_training_rows"] else "")
             + f", using {fit['model_predictors']} predictors after preparing the data. "
