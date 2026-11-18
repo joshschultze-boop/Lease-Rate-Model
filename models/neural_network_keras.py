@@ -44,20 +44,20 @@ PARAMETERS = {
         "help": "Add or delete rows to add or remove layers. Notebook: 500, 100, 50, 20, 10, 5 neurons.",
     },
     "epochs": {
-        "label": "Epochs (maximum)", "type": "int", "default": 400, "min": 1,
-        "help": "Notebook: 400.",
+        "label": "Epochs (maximum)", "type": "int", "default": 450, "min": 1,
+        "help": "Notebook: 450.",
     },
     "learning_rate": {
         "label": "Learning rate", "type": "float", "default": 0.001, "min": 0.0, "step": 0.0001, "format": "%.5f",
         "help": "Adam optimizer step size. Notebook: 0.001.",
     },
     "batch_size": {
-        "label": "Batch size", "type": "int", "default": 32, "min": 1,
-        "help": "Training rows per weight update. Notebook: 32.",
+        "label": "Batch size", "type": "int", "default": 16, "min": 1,
+        "help": "Training rows per weight update. Notebook: 16.",
     },
     "alpha": {
-        "label": "Alpha (L2 penalty)", "type": "float", "default": 0.0001, "min": 0.0, "step": 0.0001, "format": "%.5f",
-        "help": "Penalty on the hidden layers' weights. Notebook: 0.0001.",
+        "label": "Alpha (L2 penalty)", "type": "float", "default": 0.001, "min": 0.0, "step": 0.0001, "format": "%.5f",
+        "help": "Penalty on the hidden layers' weights. Notebook: 0.001.",
     },
     "early_stopping": {
         "label": "Early stopping", "type": "bool", "default": True,
