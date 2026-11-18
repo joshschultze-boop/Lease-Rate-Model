@@ -19,9 +19,9 @@ SEED_USED_FOR = "the arpack and randomized solvers only (the default full solver
 
 PARAMETERS = {
     "n_components": {
-        "label": "Number of components", "type": "int", "default": 69, "min": 1,
+        "label": "Number of components", "type": "int", "default": 55, "min": 1,
         "help": "At most the number of predictors after one-hot encoding, and at most the training rows minus 1. "
-                "Notebook: 69, the lowest RMSE in your grid search.",
+                "Notebook: 55, the lowest RMSE in your grid search.",
     },
     "svd_solver": {
         "label": "PCA solver", "type": "choice", "options": ["full", "auto", "covariance_eigh", "arpack", "randomized"],
