@@ -26,9 +26,11 @@ DEFAULT_DATE = ["Lease Start", "Sale Date"]
 DEFAULT_CATEGORICAL = ["City", "City-Zip", "County", "CBSA", "Lease Type", "County-Zoning", "City-Zoning", "NNN"]
 DEFAULT_TARGET = "Monthly Rent"
 
+# Columns checked to start with in the results (others can be checked below the results).
+SHOWN_TO_START = ["Full Address", "Predicted {target}", "Actual {target}"]
+
 FROM_TEST_DATA_PAGE = "Test data from the Test Data page"
 UPLOAD_TEST_CSV = "Upload a test CSV"
-OTHER_COLUMNS = "Other columns in the test data"
 
 
 def parameter_box(model_name, name, spec):
@@ -166,8 +168,9 @@ def fit_and_save(choices):
         "column_groups": {
             "Results": result_columns,
             "Predictors used": predictors,
-            OTHER_COLUMNS: [column for column in test_columns if column not in predictors],
+            "Other columns in the test data": [column for column in test_columns if column not in predictors],
         },
+        "shown_to_start": [column.format(target=target) for column in SHOWN_TO_START],
         "model_name": choices["model_name"],
         "metrics": metrics,
         "details": fit["details"],
@@ -206,7 +209,7 @@ def show_results():
             st.write(f"**{group}**")
             boxes = st.columns(4)
             for position, column in enumerate(columns):
-                if boxes[position % 4].checkbox(column, value=group != OTHER_COLUMNS, key=f"show column: {column}"):
+                if boxes[position % 4].checkbox(column, value=column in result["shown_to_start"], key=f"show column: {column}"):
                     shown_columns.append(column)
     if not shown_columns:
         st.info("Check at least one column to see the results.")
