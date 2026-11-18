@@ -19,9 +19,9 @@ SEED_USED_FOR = "the random coefficient update order"
 
 PARAMETERS = {
     "alpha": {
-        "label": "Alpha (L1 penalty)", "type": "float", "default": 505.07480483824537, "min": 0.0, "step": 1.0,
+        "label": "Alpha (L1 penalty)", "type": "float", "default": 325, "min": 0.0, "step": 1.0,
         "format": "%.4f",
-        "help": "Higher values keep fewer predictors. Notebook: 505.07, the lowest RMSE in your grid search.",
+        "help": "Higher values keep fewer predictors. Notebook: 325, the lowest RMSE in your grid search.",
     },
     "max_iter": {
         "label": "Maximum iterations", "type": "int", "default": 1_000_000, "min": 1,
