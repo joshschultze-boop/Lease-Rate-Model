@@ -1,12 +1,19 @@
-"""The comp sheet template: its columns, and adding new entries to a sheet.
+"""The comp sheet template: its columns, the form for typing in entries, and adding entries to a sheet.
 
-The Home page builds its new-entry form from these columns. Before cleaning,
-add_entries_to_excel adds any missing template columns and the new entries.
+The Home page (comps) and the Test Data page (properties to predict) both use the entry form.
+Before cleaning, add_entries_to_excel adds any missing template columns and the typed-in entries.
 """
 
-from openpyxl import load_workbook
+from datetime import date
+from io import BytesIO
 
-# Each column is paired with the kind of input box the Home page shows for it:
+import pandas as pd
+import streamlit as st
+from openpyxl import Workbook, load_workbook
+
+from cleaning.functions import STATE_FIPS_TO_ABBR
+
+# Each column is paired with the kind of input box the entry form shows for it:
 #   "text", "state" (dropdown), "number" (0 or more), "whole number",
 #   "coordinate" (can be negative, 6 decimals), or "date".
 # Names must match the cleaning functions exactly (e.g. "Street Address", capital A).
@@ -37,6 +44,89 @@ OPTIONAL_COLUMNS = {
 }
 
 ALL_TEMPLATE_COLUMNS = list(REQUIRED_COLUMNS) + list(OPTIONAL_COLUMNS)
+STATE_OPTIONS = sorted(set(STATE_FIPS_TO_ABBR.values()))
+
+
+# ---------------------------------------------------------------------
+# The entry form (shown on the page)
+# ---------------------------------------------------------------------
+
+def _entry_box(label, kind):
+    """The right kind of input box for a column. Returns what was entered (None if blank)."""
+    if kind == "text":
+        return st.text_input(label).strip() or None
+    if kind == "state":
+        return st.selectbox(label, STATE_OPTIONS, index=None, placeholder="Choose a state")
+    if kind == "number":
+        return st.number_input(label, min_value=0.0, value=None)
+    if kind == "whole number":
+        return st.number_input(label, min_value=0, step=1, value=None)
+    if kind == "coordinate":
+        return st.number_input(label, value=None, format="%.6f")
+    if kind == "date":
+        return st.date_input(label, value=None, min_value=date(1950, 1, 1), max_value=date(2100, 12, 31))
+    raise ValueError(f"Unknown input kind: {kind}")
+
+
+def _entry_boxes(columns, required):
+    """One box per column, spread across three side-by-side columns."""
+    page_columns = st.columns(3)
+    values = {}
+    for position, (column_name, kind) in enumerate(columns.items()):
+        with page_columns[position % 3]:
+            values[column_name] = _entry_box(column_name + (" *" if required else ""), kind)
+    return values
+
+
+def entry_form(form_key, required_columns, optional_columns, entries):
+    """
+    A form with one box per column. When "Add entry" is clicked and every required field
+    is filled in, the entry (a dictionary of column -> value) is added to `entries`.
+    The form keeps its values afterwards, so entering several similar rows is quick.
+    """
+    with st.form(form_key):
+        st.subheader("Required")
+        entry = _entry_boxes(required_columns, required=True)
+        with st.expander("Optional, but recommended"):
+            entry.update(_entry_boxes(optional_columns, required=False))
+        clicked = st.form_submit_button("Add entry", type="primary")
+
+    if clicked:
+        missing = [column for column in required_columns if entry[column] is None]
+        if missing:
+            st.error("Fill in these required fields first: " + ", ".join(missing))
+        else:
+            entries.append(entry)
+            st.success(f"Added {entry['Street Address']}, {entry['City']}.")
+
+
+def show_entries(entries, note):
+    """The entries added so far, with buttons to remove the last one or clear them all."""
+    if not entries:
+        return
+    st.write(f"**Entries ({len(entries)})**: {note}")
+    st.dataframe(pd.DataFrame(entries), hide_index=True)
+    remove_column, clear_column, _ = st.columns([1, 1, 4])
+    if remove_column.button("Remove last entry"):
+        entries.pop()
+        st.rerun()
+    if clear_column.button("Clear all entries"):
+        entries.clear()
+        st.rerun()
+
+
+# ---------------------------------------------------------------------
+# Excel files
+# ---------------------------------------------------------------------
+
+def blank_sheet():
+    """An empty comp sheet with just the template headers (sheet "Sheet1"), as Excel file bytes."""
+    workbook = Workbook()
+    workbook.active.title = "Sheet1"
+    workbook.active.append(ALL_TEMPLATE_COLUMNS)
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
 
 
 def add_entries_to_excel(excel_path, sheet_name, new_entries):
