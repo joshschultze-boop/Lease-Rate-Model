@@ -4,13 +4,17 @@ The Preprocess and Test Data pages both use this file, so training data and test
 always come out in exactly the same format. Each page calls:
     select_model_columns() -> keeps the columns the model uses, in a fixed order
     choose_steps()         -> shows the step list and settings, returns your choices
+                              (start=... begins from earlier choices, e.g. the last Preprocess run)
     run_steps()            -> runs them
     show_report() / show_preview() -> shows how each step went, and the columns that will be saved
 
 has_rent=False is for test data with no Monthly Rent: every step runs the same way, except the
 rent parts and the training data's row filters (TRAINING_ONLY_STEPS). The Test Data page has its
 own row rules instead (find_row_problems), so it removes only the rows you choose and says why.
+Rows with Year Built above YEAR_BUILT_MAXIMUM are always removed, from training and test data alike.
 """
+
+from datetime import date
 
 import pandas as pd
 import streamlit as st
@@ -41,7 +45,7 @@ NUMERICAL_COLUMNS = [
     "Year Built", "Sale Price", "Lease BCR", "Distance to Interstate", "Lease Length (Months)",
 ]
 DATE_COLUMNS = ["Lease Start", "Sale Date"]
-EPOCH = pd.Timestamp("1950-01-01")  # Dates become "days since" this date.
+DEFAULT_START_DATE = date(1950, 1, 1)  # Dates become "days since" this date (changeable on the page).
 TARGET_COLUMNS = ["Monthly Rent"]
 
 # Only these columns are kept, always in this order (so training and test CSVs line up).
@@ -100,15 +104,17 @@ MISSING_REQUIRED = "Are missing required information"
 STATE_NOT_KEPT = "Are in a state not in the list"
 BCR_ABOVE_LIMIT = "Have Lease BCR above the limit"
 YEAR_BUILT_TOO_HIGH = f"Have Year Built above {YEAR_BUILT_MAXIMUM}"
-ROW_RULES = [MISSING_REQUIRED, STATE_NOT_KEPT, BCR_ABOVE_LIMIT, YEAR_BUILT_TOO_HIGH]
+ROW_RULES = [MISSING_REQUIRED, STATE_NOT_KEPT, BCR_ABOVE_LIMIT]   # the ones you can choose
+ALWAYS_APPLIED_RULES = [YEAR_BUILT_TOO_HIGH]                      # always removed, not a choice
 
 
 def find_row_problems(table, states_to_keep, lease_bcr_maximum):
     """
     For each row of cleaned data, why each rule would remove it ("" when the row passes).
-    One column per rule in ROW_RULES, e.g. "Missing CBSA, County" or "Lease BCR 0.40 is above 0.25".
+    One column per rule in ROW_RULES + ALWAYS_APPLIED_RULES, e.g. "Missing CBSA, County" or
+    "Lease BCR 0.40 is above 0.25".
     """
-    problems = pd.DataFrame("", index=table.index, columns=ROW_RULES)
+    problems = pd.DataFrame("", index=table.index, columns=ROW_RULES + ALWAYS_APPLIED_RULES)
 
     # Required info: number columns must hold a number; other columns can't be blank or "unknown".
     def is_missing(column):
@@ -151,10 +157,16 @@ def select_model_columns(table, has_rent, extra_columns=()):
     return (None if missing else table[extra + needed]), missing
 
 
-def choose_steps(has_rent):
-    """Show the step list, the order they'll run in, and the settings. Returns (chosen steps, settings)."""
+def choose_steps(has_rent, start=None):
+    """
+    Show the step list, the order they'll run in, and the settings. Returns (chosen steps, settings).
+    start: earlier choices to begin from ({"steps": [...], "settings": {...}}), or None for the defaults.
+    """
     options = ALL_STEPS if has_rent else [step for step in ALL_STEPS if step not in TRAINING_ONLY_STEPS]
-    chosen = st.multiselect("Preprocessing steps", options, default=options)
+    start_steps = [step for step in (start or {}).get("steps", options) if step in options]
+    start_settings = (start or {}).get("settings", {})
+
+    chosen = st.multiselect("Preprocessing steps", options, default=start_steps)
     in_order = [step for step in options if step in chosen]
     if in_order:
         st.markdown("**These steps will run in this order:**\n" + "\n".join(f"{n}. {s}" for n, s in enumerate(in_order, 1)))
@@ -162,11 +174,21 @@ def choose_steps(has_rent):
     st.write("**Settings**")
     settings = {}
     if has_rent:  # Row filters are for training data only.
-        settings["states_to_keep"] = st.multiselect("Keep rows from these states", ALL_STATES, default=["CO"])
-        settings["lease_bcr_maximum"] = st.number_input("Remove rows with Lease BCR above", min_value=0.0, value=0.25, step=0.05)
+        settings["states_to_keep"] = st.multiselect("Keep rows from these states", ALL_STATES,
+                                                    default=start_settings.get("states_to_keep", ["CO"]))
+        settings["lease_bcr_maximum"] = st.number_input("Remove rows with Lease BCR above", min_value=0.0, step=0.05,
+                                                        value=start_settings.get("lease_bcr_maximum", 0.25))
         if REMOVE_ROWS in chosen and not settings["states_to_keep"]:
             st.warning("No states are selected to keep, so every row will be removed.")
-    settings["log_method"] = st.radio("Log columns", list(LOG_METHOD_NAMES), format_func=LOG_METHOD_NAMES.get, horizontal=True)
+    settings["log_method"] = st.radio("Log columns", list(LOG_METHOD_NAMES), format_func=LOG_METHOD_NAMES.get,
+                                      index=list(LOG_METHOD_NAMES).index(start_settings.get("log_method", "log1p")),
+                                      horizontal=True)
+    settings["start_date"] = st.date_input(
+        "Dates: count days from", value=start_settings.get("start_date", DEFAULT_START_DATE),
+        min_value=date(1900, 1, 1), max_value=date(2100, 12, 31), format="YYYY-MM-DD",
+        help="Lease Start and Sale Date become the number of days since this date. "
+             "Training and test data must use the same date.",
+    )
     return chosen, settings
 
 
@@ -211,10 +233,12 @@ def run_steps(df, chosen_steps, settings, has_rent):
         if step in chosen_steps:
             df = run_step(step, df, combine_categorical_columns, columns=columns, new_column=new_column)
 
-    # 5. Blank categories become "unknown", text in number columns becomes blank, dates become days since EPOCH.
+    # 5. Blank categories become "unknown", text in number columns becomes blank,
+    #    and dates become days since the chosen start date.
     if CONVERT_TYPES in chosen_steps:
         df = run_step(CONVERT_TYPES, df, convert_data_types, categorical_columns=CATEGORICAL_COLUMNS,
-                      numerical_columns=NUMERICAL_COLUMNS, date_columns=DATE_COLUMNS, epoch=EPOCH)
+                      numerical_columns=NUMERICAL_COLUMNS, date_columns=DATE_COLUMNS,
+                      epoch=pd.Timestamp(settings["start_date"]))
 
     # 6-7. 0/1 flag columns: 1 when the value is blank or "unknown".
     if SALE_UNKNOWN in chosen_steps:
@@ -269,9 +293,10 @@ def show_report(report):
     st.dataframe(pd.DataFrame(report, columns=["", "Step", "Rows after", "Notes"]), hide_index=True)
 
 
-def show_preview(data, reference_columns=None):
+def show_preview(data, start_date, reference_columns=None):
     """
     The columns that will be saved (type, filled, blank), then the data itself.
+    start_date is the date the date columns count days from.
     reference_columns (optional) are shown on the left of the data so you can tell rows apart;
     they aren't part of the saved data.
     """
@@ -279,7 +304,7 @@ def show_preview(data, reference_columns=None):
 
     def describe(column):
         if column in DATE_COLUMNS and pd.api.types.is_numeric_dtype(data[column]):
-            return f"Days since {EPOCH:%Y-%m-%d}"
+            return f"Days since {start_date:%Y-%m-%d}"
         if column in CATEGORICAL_COLUMNS or isinstance(data[column].dtype, pd.CategoricalDtype):
             return "Category"
         return "Number" if pd.api.types.is_numeric_dtype(data[column]) else "Text"
