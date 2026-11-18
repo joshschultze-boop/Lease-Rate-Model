@@ -4,7 +4,8 @@
 #        and target columns
 #   3.   Choose the test data (from the Test Data page, or an uploaded CSV with or without rent)
 #   4.   Choose the random seed (one for every model), a model, and its parameters, then fit and predict
-#   5.   Results: errors (when the test data has actual rent), column checkboxes, and a download
+#   5.   Results: each property's Full Address with its predicted rent (in $), errors (when the test data
+#        has actual rent), column checkboxes, and a download
 #
 # Preparing the data and fitting happen in models/shared.py, the same way for every model.
 # The models are listed in models/__init__.py. Adding a model doesn't change this page.
@@ -29,6 +30,10 @@ DEFAULT_NUMERICAL = [
 DEFAULT_DATE = ["Lease Start", "Sale Date"]
 DEFAULT_CATEGORICAL = ["City", "City-Zip", "County", "CBSA", "Lease Type", "County-Zoning", "City-Zoning", "NNN"]
 DEFAULT_TARGET = "Monthly Rent"
+
+# Columns that identify each property. They come from the Test Data page, or from any uploaded test CSV
+# that has them (the Test Data and Preprocess downloads do). They're shown, never used as model inputs.
+PROPERTY_COLUMNS = ["Sheet Row", "Street Address", "Full Address"]
 
 # Columns checked to start with in the results (others can be checked below the results).
 SHOWN_TO_START = ["Full Address", "Predicted {target}", "Actual {target}"]
@@ -201,7 +206,9 @@ def choose_data_and_model():
             st.info("Make test data on the Test Data page (it's used here automatically), "
                     "or upload a test CSV you downloaded earlier.")
             return None
-        test, properties, test_name = read_csv_as_text(test_file), None, test_file.name
+        test, test_name = read_csv_as_text(test_file), test_file.name
+        found = [column for column in PROPERTY_COLUMNS if column in test.columns]
+        properties = test[found].reset_index(drop=True) if found else None
 
     missing = [column for column in predictors if column not in test.columns]
     if missing:
@@ -293,7 +300,8 @@ def fit_and_save(choices):
         results = add_error_columns(results, actual, predicted)
         result_columns += [actual, "Absolute Error", "Proportional Error (%)"]
         metrics = calculate_metrics(results[actual], fit["predictions"])
-    test_columns = [column for column in test.columns if column != target]  # the target is shown as "Actual"
+    # The target is shown as "Actual", and the property columns are shown first, so leave them out here.
+    test_columns = [column for column in test.columns if column != target and column not in PROPERTY_COLUMNS]
     results = pd.concat([results, numbers_where_possible(test[test_columns])], axis=1)
 
     predictors = choices["numerical"] + choices["dates"] + choices["categorical"]
@@ -305,6 +313,7 @@ def fit_and_save(choices):
             "Other columns in the test data": [column for column in test_columns if column not in predictors],
         },
         "shown_to_start": [column.format(target=target) for column in SHOWN_TO_START],
+        "money_columns": [predicted] + ([f"Actual {target}", "Absolute Error"] if metrics is not None else []),
         "model_name": choices["model_name"],
         "metrics": metrics,
         "details": fit["details"],
@@ -332,7 +341,7 @@ def show_results():
 
     if result["metrics"] is not None:
         rmse_box, proportional_box, count_box = st.columns(3)
-        rmse_box.metric("RMSE", f"{result['metrics']['RMSE']:,.2f}")
+        rmse_box.metric("RMSE", f"${result['metrics']['RMSE']:,.2f}")
         proportional_box.metric("Proportional Error", f"{result['metrics']['Proportional Error']:.2%}")
         count_box.metric("Observations scored", result["metrics"]["Observations scored"])
     if result["details"] is not None:
@@ -353,9 +362,30 @@ def show_results():
         return
 
     shown = result["results"][shown_columns]
-    st.dataframe(shown, height=500, hide_index=True)
+    money = [column for column in result["money_columns"] if column in shown_columns]
+    percent = [column for column in ["Proportional Error (%)"] if column in shown_columns]
+
+    # Rent and errors in dollars, proportional error as a percent, and Full Address kept in view.
+    column_config = {column: st.column_config.NumberColumn(format="dollar") for column in money}
+    column_config.update({column: st.column_config.NumberColumn(format="%.1f%%") for column in percent})
+    if "Full Address" in shown_columns:
+        column_config["Full Address"] = st.column_config.TextColumn(pinned=True)
+    st.dataframe(shown, column_config=column_config, height=500, hide_index=True)
+
     file_name = st.text_input("Name for the download", value=f"predictions - {result['model_name']}").strip()
-    st.download_button("Download these results (CSV)", data=shown.to_csv(index=False).encode("utf-8"),
+    dollar_download = st.checkbox("Use $ formatting in the download", value=True,
+                                  help="On: rent and errors like $12,345.67, which Excel reads as currency. "
+                                       "Off: plain numbers, easier to reuse in Python.")
+    download = shown.copy()
+    if dollar_download:
+        for column in money:
+            download[column] = download[column].map(lambda value: "" if pd.isna(value) else f"${value:,.2f}")
+        for column in percent:
+            download[column] = download[column].map(lambda value: "" if pd.isna(value) else f"{value:.1f}%")
+    else:
+        download[money] = download[money].round(2)      # dollars and cents
+        download[percent] = download[percent].round(2)
+    st.download_button("Download these results (CSV)", data=download.to_csv(index=False).encode("utf-8"),
                        file_name=file_name.removesuffix(".csv") + ".csv", mime="text/csv", type="primary",
                        disabled=not file_name)
     st.caption("The download has the checked columns, in the order shown.")

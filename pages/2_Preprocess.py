@@ -37,12 +37,15 @@ def choose_cleaned_data():
 
     table = pd.read_excel(BytesIO(file_bytes), sheet_name=sheet)
     table.columns = [str(column).strip() for column in table.columns]
-    data, missing = preprocessing_steps.select_model_columns(table, has_rent=True)
+    # Full Address is kept in front so the Predictions page can show it. It isn't a model input
+    # unless you choose it there, and no preprocessing step changes it.
+    data, missing = preprocessing_steps.select_model_columns(table, has_rent=True, extra_columns=["Full Address"])
     if missing:
         st.error("This file is missing columns the preprocessing needs: " + ", ".join(missing)
                  + ". Run it through the Clean Data page first, or add these columns.")
         return None
-    st.caption(f"{len(data)} rows. The {len(data.columns)} columns the model uses will be loaded.")
+    st.caption(f"{len(data)} rows. The columns the models can use will be loaded, plus Full Address "
+               "to identify each property.")
     return data
 
 

@@ -14,7 +14,7 @@
 #
 # Kept in memory (st.session_state) until the tab is closed or refreshed:
 #   "test_entries"         -> properties typed in on this page
-#   "test_data"            -> the model inputs (same columns as the training CSV, minus the rent columns),
+#   "test_data"            -> the model inputs (same model columns as the training data, minus the rent columns),
 #                             plus "Monthly Rent" when any property has an actual rent
 #   "test_data_properties" -> Sheet Row and address for each test_data row, in the same order
 #   "test_data_run"        -> where the data came from, step reports, removed/flagged rows, downloads
@@ -207,9 +207,12 @@ if "test_data" in st.session_state:
         st.info(f"{len(run['flagged'])} properties break a rule you didn't choose, so they were kept:")
         st.dataframe(run["flagged"], hide_index=True)
 
-    st.caption("Kept in memory for the Predictions page. Download a copy only if you want to keep it.")
+    st.caption("Kept in memory for the Predictions page. Download a copy only if you want to keep it. "
+               "The CSV starts with each property's Sheet Row and address, so uploading it on the Predictions "
+               "page later still shows them.")
+    test_csv = pd.concat([st.session_state["test_data_properties"], test_data], axis=1)
     left, right, _ = st.columns([1, 1, 2])
-    left.download_button("Download test CSV", data=test_data.to_csv(index=False).encode("utf-8"),
+    left.download_button("Download test CSV", data=test_csv.to_csv(index=False).encode("utf-8"),
                          file_name=run["csv_name"], mime="text/csv")
     right.download_button("Download cleaned Excel", data=run["cleaned_bytes"],
                           file_name=run["csv_name"].removesuffix(".csv") + " (cleaned).xlsx",
