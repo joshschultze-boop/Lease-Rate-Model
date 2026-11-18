@@ -15,6 +15,7 @@ DESCRIPTION = (
 )
 ONE_HOT_ENCODE = True
 SCALE_NUMERIC = False  # As in the notebook's grid search: the StandardScaler below scales every predictor.
+SEED_USED_FOR = "the sag and saga solvers only (the default svd solver has no randomness)"
 
 PARAMETERS = {
     "alpha": {
@@ -30,7 +31,7 @@ PARAMETERS = {
 }
 
 
-def fit_and_predict(X_train, y_train, X_test, alpha, solver):
+def fit_and_predict(X_train, y_train, X_test, random_state, alpha, solver):
     """Returns (predictions, every predictor's coefficient)."""
     # Model libraries load here, so a problem with one model's library can't affect the others.
     from sklearn.impute import SimpleImputer
@@ -41,7 +42,7 @@ def fit_and_predict(X_train, y_train, X_test, alpha, solver):
     model = make_pipeline(
         SimpleImputer(strategy="median", keep_empty_features=True),
         StandardScaler(),
-        Ridge(alpha=alpha, solver=solver),
+        Ridge(alpha=alpha, solver=solver, random_state=random_state),
     )
     model.fit(X_train, y_train)
 

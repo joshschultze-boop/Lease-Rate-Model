@@ -19,6 +19,7 @@ DESCRIPTION = (
 )
 ONE_HOT_ENCODE = True
 SCALE_NUMERIC = False  # As in the notebook's grid search: the network fits its own StandardScaler.
+SEED_USED_FOR = "the starting weights, shuffling, dropout, and the random validation sample"
 
 PARAMETERS = {
     "layer_settings": {
@@ -78,15 +79,11 @@ PARAMETERS = {
         "label": "Tolerance", "type": "float", "default": 1e-5, "min": 0.0, "step": 1e-6, "format": "%.1e",
         "help": "Smallest drop in validation loss that counts as improvement. Notebook: 1e-5.",
     },
-    "random_state": {
-        "label": "Random seed", "type": "int", "default": 42, "min": 0,
-        "help": "Sets the starting weights, shuffling, and validation sample. Notebook: 42.",
-    },
 }
 
 
-def fit_and_predict(X_train, y_train, X_test, layer_settings, activation, epochs, learning_rate, batch_size,
-                    alpha, early_stopping, validation_fraction, patience, tolerance, random_state):
+def fit_and_predict(X_train, y_train, X_test, random_state, layer_settings, activation, epochs, learning_rate,
+                    batch_size, alpha, early_stopping, validation_fraction, patience, tolerance):
     """Returns (predictions, a summary of the layers and training)."""
     # Model libraries load here, so a problem with one model's library can't affect the others.
     import keras

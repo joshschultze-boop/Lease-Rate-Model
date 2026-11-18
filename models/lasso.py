@@ -15,6 +15,7 @@ DESCRIPTION = (
 )
 ONE_HOT_ENCODE = True
 SCALE_NUMERIC = False  # As in the notebook's grid search: the StandardScaler below scales every predictor.
+SEED_USED_FOR = "the random coefficient update order"
 
 PARAMETERS = {
     "alpha": {
@@ -34,15 +35,10 @@ PARAMETERS = {
         "label": "Coefficient update order", "type": "choice", "options": ["random", "cyclic"], "default": "random",
         "help": "Notebook: random.",
     },
-    "random_state": {
-        "label": "Random seed", "type": "int", "default": 42, "min": 0,
-        "help": "Used by the random update order. Notebook: a new random seed each session; "
-                "a fixed seed makes results repeatable.",
-    },
 }
 
 
-def fit_and_predict(X_train, y_train, X_test, alpha, max_iter, tol, selection, random_state):
+def fit_and_predict(X_train, y_train, X_test, random_state, alpha, max_iter, tol, selection):
     """Returns (predictions, the predictors kept with their coefficients)."""
     # Model libraries load here, so a problem with one model's library can't affect the others.
     from sklearn.impute import SimpleImputer

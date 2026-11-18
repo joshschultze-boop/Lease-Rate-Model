@@ -129,14 +129,14 @@ class DataFramePreprocessor:
 # ---------------------------------------------------------------------
 
 def run_model(model, parameters, training, test, numerical_columns, date_columns, categorical_columns,
-              target_column, min_frequency):
+              target_column, min_frequency, random_state):
     """
     Everything between the CSVs and the model:
       1. Training rows need a target value.
       2. Keep the predictor columns. Number and date columns become numbers
          (dates are already "days since the start date" chosen on the Preprocess page).
       3. Prepare the data, learned from the training rows only, the way the model asks for it.
-      4. Fit the model and predict the test rows.
+      4. Fit the model and predict the test rows, with the page's random seed (random_state).
     Returns a dictionary with the predictions, the model's details table (or None), and counts.
     """
     def predictors(table):
@@ -156,7 +156,7 @@ def run_model(model, parameters, training, test, numerical_columns, date_columns
     X_train = preprocessor.fit_transform(predictors(training[has_target].reset_index(drop=True)))
     X_test = preprocessor.transform(predictors(test))
 
-    result = model.fit_and_predict(X_train, y_train, X_test, **parameters)
+    result = model.fit_and_predict(X_train, y_train, X_test, random_state=random_state, **parameters)
     predictions, details = result if isinstance(result, tuple) else (result, None)
     predictions = np.asarray(predictions, dtype=float).reshape(-1)
     if len(predictions) != len(X_test):

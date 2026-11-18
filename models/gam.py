@@ -16,6 +16,7 @@ DESCRIPTION = (
 )
 ONE_HOT_ENCODE = True
 SCALE_NUMERIC = True  # As in the notebook's validation of this model (normalize_numeric=True): numerical columns 0-1.
+SEED_USED_FOR = None  # pyGAM's fitting has no randomness.
 
 PARAMETERS = {
     "spline_terms": {
@@ -64,7 +65,7 @@ PARAMETERS = {
 }
 
 
-def fit_and_predict(X_train, y_train, X_test, spline_terms, linear_lam, lam_scale, max_iter):
+def fit_and_predict(X_train, y_train, X_test, random_state, spline_terms, linear_lam, lam_scale, max_iter):
     """Returns (predictions, the term used for each predictor)."""
     # Model libraries load here, so a problem with one model's library can't affect the others.
     from pygam import LinearGAM, l, s

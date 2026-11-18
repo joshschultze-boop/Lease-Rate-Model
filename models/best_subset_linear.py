@@ -16,6 +16,7 @@ DESCRIPTION = (
 )
 ONE_HOT_ENCODE = True
 SCALE_NUMERIC = False  # As in the notebook's grid search: the StandardScaler below scales every predictor.
+SEED_USED_FOR = None   # ABESS fits the one support size given with no randomness.
 
 PARAMETERS = {
     "support_size": {
@@ -29,7 +30,7 @@ PARAMETERS = {
 }
 
 
-def fit_and_predict(X_train, y_train, X_test, support_size, alpha):
+def fit_and_predict(X_train, y_train, X_test, random_state, support_size, alpha):
     """Returns (predictions, the predictors kept with their coefficients)."""
     # Model libraries load here, so a problem with one model's library can't affect the others.
     from abess.linear import LinearRegression as ABESSLinearRegression

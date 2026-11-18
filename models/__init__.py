@@ -21,14 +21,16 @@ OUTLINE: every model file has the same parts, in the same order
     ONE_HOT_ENCODE = True                 # False: categories arrive as pandas categories instead of
                                           #        one-hot columns (for models that handle categories themselves)
     SCALE_NUMERIC = False                 # True: numerical columns are scaled to 0-1 first
+    SEED_USED_FOR = "the random forest's sampling"   # what the page's random seed sets in this model,
+                                          # or None if the model has no randomness
     PARAMETERS = {                        # one box on the page per entry, in this order
         "n_estimators": {"label": "Number of trees", "type": "int", "default": 500, "min": 1,
                          "help": "What it does. Notebook: 500."},
     }
 
-    def fit_and_predict(X_train, y_train, X_test, n_estimators):
+    def fit_and_predict(X_train, y_train, X_test, random_state, n_estimators):
         from sklearn.ensemble import RandomForestRegressor   # model libraries load here
-        ...                               # fit on X_train / y_train
+        ...                               # fit on X_train / y_train, using random_state as the seed
         return predictions                # one per X_test row, same order
                                           # (or return predictions, details_table to show a table under "Model details")
 
@@ -45,6 +47,8 @@ PARAMETER TYPES
                    [{"neurons": 400, "dropout_rate": 0.2}, ...]
 
 X_train and X_test arrive already prepared by models/shared.py, with identical columns.
+random_state is the seed chosen on the Predictions page (typed in, or new each fit). Every model
+receives it; a model with no randomness simply doesn't use it. Don't add a seed to PARAMETERS.
 """
 
 from models import best_subset_linear, gam, lasso, neural_network, neural_network_keras, ridge
