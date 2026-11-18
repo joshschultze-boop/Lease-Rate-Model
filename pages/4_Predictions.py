@@ -3,13 +3,14 @@
 #   1-2. Choose the training data (from the Preprocess page, or an uploaded CSV) and its predictor
 #        and target columns
 #   3.   Choose the test data (from the Test Data page, or an uploaded CSV with or without rent)
-#   4.   Choose a model and its parameters, then fit and predict
+#   4.   Choose the random seed (one for every model), a model, and its parameters, then fit and predict
 #   5.   Results: errors (when the test data has actual rent), column checkboxes, and a download
 #
 # Preparing the data and fitting happen in models/shared.py, the same way for every model.
 # The models are listed in models/__init__.py. Adding a model doesn't change this page.
 
 import hashlib
+import secrets
 
 import pandas as pd
 import streamlit as st
@@ -31,6 +32,18 @@ DEFAULT_TARGET = "Monthly Rent"
 
 # Columns checked to start with in the results (others can be checked below the results).
 SHOWN_TO_START = ["Full Address", "Predicted {target}", "Actual {target}"]
+
+# The random seed is one setting for every model. Each model file says what it uses it for (SEED_USED_FOR).
+NEW_SEED = "New random seed each fit"
+TYPED_SEED = "Use this seed"
+SEED_SETTINGS = {
+    "seed_choice": {"label": "Random seed (all models)", "type": "choice", "options": [NEW_SEED, TYPED_SEED],
+                    "default": NEW_SEED,
+                    "help": "A new seed each fit is like your notebooks' random seed per run. The seed used is shown "
+                            "with the results, so you can type it in to repeat a run exactly."},
+    "seed": {"label": "Seed", "type": "int", "default": 42, "min": 0, "max": 2**32 - 1,
+             "help": "Any whole number from 0 to 4,294,967,295. The same seed gives the same results."},
+}
 
 FROM_PREPROCESS_PAGE = "Training data from the Preprocess page"
 UPLOAD_TRAINING_CSV = "Upload a training CSV"
@@ -194,14 +207,28 @@ def choose_data_and_model():
     if missing:
         st.error("The test data is missing these predictor columns: " + ", ".join(missing))
         return None
-    has_actual = target in test.columns and pd.to_numeric(test[target], errors="coerce").notna().any()
-    st.caption(f"{len(test)} rows. " + (f"The test data has actual {target}, so errors will be calculated." if has_actual
-                                        else f"There's no actual {target} in the test data, so only predictions are made."))
+    actual_count = int(pd.to_numeric(test[target], errors="coerce").notna().sum()) if target in test.columns else 0
+    if actual_count:
+        st.caption(f"{len(test)} rows. {actual_count} of them have an actual {target} to compare the predictions with.")
+        has_actual = st.checkbox(f"Report errors against the actual {target}", value=True,
+                                 help="RMSE and proportional error for the whole set, plus absolute and proportional "
+                                      "error for each row that has an actual value.")
+    else:
+        st.caption(f"{len(test)} rows. There's no actual {target} in the test data, so only predictions are made.")
+        has_actual = False
 
     st.header("4. Model")
+    seed_box, seed_number_box, _ = st.columns([1, 1, 1])
+    with seed_box:
+        seed_choice = parameter_box("All models", "seed_choice", SEED_SETTINGS["seed_choice"])
+    with seed_number_box:
+        typed_seed = parameter_box("All models", "seed", SEED_SETTINGS["seed"]) if seed_choice == TYPED_SEED else None
+
     model_name = st.selectbox("Model", list(MODELS))
     model = MODELS[model_name]
     st.caption(model.DESCRIPTION)
+    st.caption(f"The random seed sets {model.SEED_USED_FOR}." if model.SEED_USED_FOR
+               else "This model has no randomness, so the seed doesn't change its results.")
     title, reset = st.columns([4, 1])
     title.write("**Parameters**")
     if reset.button("Reset to defaults", help="Put this model's parameters back to the values in its model file."):
@@ -235,6 +262,7 @@ def choose_data_and_model():
         "training": training, "training_name": training_name, "test": test, "test_name": test_name, "properties": properties, "has_actual": has_actual,
         "numerical": numerical, "dates": dates, "categorical": categorical, "target": target,
         "model_name": model_name, "model": model, "parameters": parameters, "min_frequency": min_frequency,
+        "typed_seed": typed_seed,
     }
 
 
@@ -243,8 +271,10 @@ def fit_and_save(choices):
     model, target, test = choices["model"], choices["target"], choices["test"]
     try:
         with st.spinner(f"Fitting {choices['model_name']}..."):
+            # A new random seed comes from the operating system, so it isn't affected by any seed set earlier.
+            seed = choices["typed_seed"] if choices["typed_seed"] is not None else secrets.randbelow(2**32)
             fit = run_model(model, choices["parameters"], choices["training"], test, choices["numerical"],
-                            choices["dates"], choices["categorical"], target, choices["min_frequency"])
+                            choices["dates"], choices["categorical"], target, choices["min_frequency"], seed)
     except Exception as error:
         st.error(f"The model couldn't be fit: {error}")
         return
@@ -286,7 +316,8 @@ def fit_and_save(choices):
             + f"). Trained on {fit['training_rows']} rows of {choices['training_name']}"
             + (f" ({fit['skipped_training_rows']} rows with no {target} were skipped)" if fit["skipped_training_rows"] else "")
             + f", using {fit['model_predictors']} predictors after preparing the data. "
-            f"Predicted {len(results)} rows of {choices['test_name']}."
+            f"Predicted {len(results)} rows of {choices['test_name']}. "
+            f"Random seed: {seed} ({'typed in' if choices['typed_seed'] is not None else 'new random seed'})."
         ),
     }
 

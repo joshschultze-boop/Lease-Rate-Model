@@ -1,5 +1,5 @@
 # pages/3_Test_Data.py
-# Cleans and preprocesses properties to predict (no Monthly Rent needed) in one run, using the same
+# Cleans and preprocesses properties to predict (Monthly Rent optional) in one run, using the same
 # steps as the Clean Data and Preprocess pages, and keeps the result in memory for the models.
 # Properties can come from an uploaded sheet, be typed in on this page, or both.
 #
@@ -9,9 +9,13 @@
 # The training data's row filters (Lease BCR, state, ...) don't run here. Rows are removed only by
 # the rules you choose in section 3 (plus Year Built above 9999, always), each listed with the reason.
 #
+# Monthly Rent is never a model input here. Where a property has an actual Monthly Rent (in the sheet
+# or typed in), it's kept in the test data so the Predictions page can report errors against it.
+#
 # Kept in memory (st.session_state) until the tab is closed or refreshed:
 #   "test_entries"         -> properties typed in on this page
-#   "test_data"            -> the model inputs: same columns as the training CSV, minus rent
+#   "test_data"            -> the model inputs (same columns as the training CSV, minus the rent columns),
+#                             plus "Monthly Rent" when any property has an actual rent
 #   "test_data_properties" -> Sheet Row and address for each test_data row, in the same order
 #   "test_data_run"        -> where the data came from, step reports, removed/flagged rows, downloads
 
@@ -31,15 +35,21 @@ st.session_state.setdefault("test_entries", [])
 # Kept alongside the test data to identify each property. They are not model inputs.
 PROPERTY_COLUMNS = ["Sheet Row", "Street Address", "Full Address"]
 
-# The entry form asks for everything a comp needs except Monthly Rent.
+# The entry form asks for everything a comp needs. Monthly Rent is optional: fill it in only if the
+# property's actual rent is known, to compare the prediction with.
 TEST_REQUIRED_COLUMNS = {column: kind for column, kind in REQUIRED_COLUMNS.items() if column != "Monthly Rent"}
+TEST_OPTIONAL_COLUMNS = {"Monthly Rent": "number", **OPTIONAL_COLUMNS}
 
 st.title("🧪 Test Data")
-st.write("Clean and preprocess properties to predict, so they're ready for the models. Monthly Rent isn't needed.")
+st.write("Clean and preprocess properties to predict, so they're ready for the models. Monthly Rent isn't needed, "
+         "but where a property's actual rent is known, it's kept so the Predictions page can report errors.")
 
 if "test_data" in st.session_state:
-    st.success(f"Test data in memory: **{st.session_state['test_data_run']['file_name']}**, "
-               f"{len(st.session_state['test_data'])} rows. The Predictions page uses it while this tab is open.")
+    test_data_in_memory = st.session_state["test_data"]
+    rent_count = int(test_data_in_memory["Monthly Rent"].notna().sum()) if "Monthly Rent" in test_data_in_memory else 0
+    st.success(f"Test data in memory: **{st.session_state['test_data_run']['file_name']}**, {len(test_data_in_memory)} rows"
+               + (f" ({rent_count} with an actual Monthly Rent to compare against)" if rent_count else "")
+               + ". The Predictions page uses it while this tab is open.")
     if st.button("Clear test data"):
         for key in ["test_data", "test_data_properties", "test_data_run"]:
             st.session_state.pop(key)
@@ -61,7 +71,7 @@ else:
 
 st.subheader("Type in properties")
 entries = st.session_state["test_entries"]
-entry_form("test_entry_form", TEST_REQUIRED_COLUMNS, OPTIONAL_COLUMNS, entries)
+entry_form("test_entry_form", TEST_REQUIRED_COLUMNS, TEST_OPTIONAL_COLUMNS, entries)
 show_entries(entries, "added after any uploaded rows when you run.")
 
 property_count = uploaded_count + len(entries)
@@ -114,7 +124,14 @@ if st.button("Run cleaning and preprocessing", type="primary", disabled=property
     cleaned["Sheet Row"] = cleaned.index + 2  # The row in the cleaned Excel download (row 1 is the header).
     cleaned = cleaned.loc[~cleaned.drop(columns="Sheet Row").isna().all(axis=1)]  # Skip empty rows.
 
-    data, missing = preprocessing_steps.select_model_columns(cleaned, has_rent=False, extra_columns=PROPERTY_COLUMNS)
+    # Keep Monthly Rent (in its usual column position) if any property has an actual rent.
+    # Blank or $0 counts as no actual rent, the same as for training data.
+    actual_rent = (pd.to_numeric(cleaned["Monthly Rent"].astype("string").str.strip().str.removeprefix("'"),
+                                 errors="coerce").replace(0, float("nan"))
+                   if "Monthly Rent" in cleaned.columns else pd.Series(dtype=float))
+    has_actual_rent = actual_rent.notna().any()
+    data, missing = preprocessing_steps.select_model_columns(cleaned, has_rent=has_actual_rent,
+                                                             extra_columns=PROPERTY_COLUMNS)
     if missing:
         st.error("After cleaning, the sheet is still missing these columns: " + ", ".join(missing)
                  + ". They're usually added by cleaning steps, so check that those steps are selected.")
@@ -149,6 +166,9 @@ if st.button("Run cleaning and preprocessing", type="primary", disabled=property
     # D. Split the property columns off, so test_data holds only the model inputs, stored exactly
     #    as the CSV reads back (a category column can mix numbers and text before this).
     properties = output[property_columns].reset_index(drop=True)
+    if has_actual_rent:
+        # No step touches Monthly Rent for test data (has_rent=False), so put in the cleaned-up numbers.
+        output["Monthly Rent"] = actual_rent.loc[output.index]
     test_data = output.drop(columns=property_columns).reset_index(drop=True)
     test_data = pd.read_csv(BytesIO(test_data.to_csv(index=False).encode("utf-8")))
 
