@@ -48,11 +48,11 @@ PARAMETERS = {
     },
     "epochs": {
         "label": "Epochs (maximum)", "type": "int", "default": 600, "min": 1,
-        "help": "Notebook: 600.",
+        "help": "Notebook: 500.",
     },
     "learning_rate": {
         "label": "Learning rate", "type": "float", "default": 0.0005, "min": 0.0, "step": 0.0001, "format": "%.5f",
-        "help": "Adam optimizer step size. Notebook: 0.0005.",
+        "help": "Adam optimizer step size. Notebook: 0.0001.",
     },
     "batch_size": {
         "label": "Batch size", "type": "int", "default": 32, "min": 1,
