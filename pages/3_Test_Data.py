@@ -3,8 +3,11 @@
 # steps as the Clean Data and Preprocess pages, and keeps the result in memory for the models.
 # Properties can come from an uploaded sheet, be typed in on this page, or both.
 #
+# The steps and settings start from your last Clean Data and Preprocess runs (including the start
+# date for dates), so test data comes out in the same format as your training data.
+#
 # The training data's row filters (Lease BCR, state, ...) don't run here. Rows are removed only by
-# the rules you choose in section 3, and every removed row is listed with the reason.
+# the rules you choose in section 3 (plus Year Built above 9999, always), each listed with the reason.
 #
 # Kept in memory (st.session_state) until the tab is closed or refreshed:
 #   "test_entries"         -> properties typed in on this page
@@ -36,7 +39,7 @@ st.write("Clean and preprocess properties to predict, so they're ready for the m
 
 if "test_data" in st.session_state:
     st.success(f"Test data in memory: **{st.session_state['test_data_run']['file_name']}**, "
-               f"{len(st.session_state['test_data'])} rows.")
+               f"{len(st.session_state['test_data'])} rows. The Predictions page uses it while this tab is open.")
     if st.button("Clear test data"):
         for key in ["test_data", "test_data_properties", "test_data_run"]:
             st.session_state.pop(key)
@@ -70,19 +73,27 @@ st.caption(f"{property_count} properties to run: {uploaded_count} uploaded and {
 st.header("2. Steps")
 st.write("The same steps and settings as the Clean Data and Preprocess pages. If you changed any of them "
          "for your training data, make the same changes here so the formats match.")
+cleaning_start, preprocessing_start = st.session_state.get("cleaning_result"), st.session_state.get("preprocess_result")
 with st.expander("Cleaning steps and settings"):
-    cleaning_choices, cleaning_settings = cleaning_steps.choose_steps()
+    st.caption("Starting from your Clean Data run in this session." if cleaning_start else
+               "No Clean Data run in this session, so these are the defaults.")
+    cleaning_choices, cleaning_settings = cleaning_steps.choose_steps(start=cleaning_start)
 with st.expander("Preprocessing steps and settings"):
-    st.caption("Without Monthly Rent, the rent conversion step doesn't run and rounding and log columns leave "
-               "Monthly Rent out. The training data's row filters don't run either: choose row rules in section 3.")
-    preprocessing_choices, preprocessing_settings = preprocessing_steps.choose_steps(has_rent=False)
+    st.caption(("Starting from your Preprocess run in this session, including its start date for dates. "
+                if preprocessing_start else
+                "No Preprocess run in this session, so these are the defaults. Set the start date for dates "
+                "to the one your training data used. ")
+               + "Without Monthly Rent, the rent conversion step doesn't run, and rounding and log columns leave "
+                 "Monthly Rent out. The training data's row filters don't run either: choose row rules in section 3.")
+    preprocessing_choices, preprocessing_settings = preprocessing_steps.choose_steps(has_rent=False, start=preprocessing_start)
 
 
 # --- 3. Rows to remove ---
 
 st.header("3. Rows to remove")
-st.write("Every property is kept unless you choose a rule here. After the run, removed rows are listed with "
-         "the reason, and so are kept rows that break a rule you didn't choose.")
+st.write(f"Every property is kept unless you choose a rule here (rows with Year Built above "
+         f"{preprocessing_steps.YEAR_BUILT_MAXIMUM} are always removed). After the run, removed rows are listed "
+         "with the reason, and so are kept rows that break a rule you didn't choose.")
 remove_rules = st.multiselect("Remove test rows that…", preprocessing_steps.ROW_RULES, default=[], placeholder="Keep every row")
 left, right = st.columns(2)
 states_to_keep = left.multiselect("States to keep (state rule)", preprocessing_steps.ALL_STATES, default=["CO"])
@@ -118,12 +129,13 @@ if st.button("Run cleaning and preprocessing", type="primary", disabled=property
         """Each row's reasons under these rules, e.g. "Missing CBSA; Lease BCR 0.40 is above 0.25"."""
         return ["; ".join(problems.at[row, rule] for rule in rules if problems.at[row, rule]) for row in rows]
 
-    is_removed = problems[remove_rules].ne("").any(axis=1)
+    applied_rules = remove_rules + preprocessing_steps.ALWAYS_APPLIED_RULES
+    is_removed = problems[applied_rules].ne("").any(axis=1)
     is_flagged = ~is_removed & problems[other_rules].ne("").any(axis=1)
-    removed = data.loc[is_removed, property_columns].assign(Reason=reasons(data.index[is_removed], remove_rules))
+    removed = data.loc[is_removed, property_columns].assign(Reason=reasons(data.index[is_removed], applied_rules))
     flagged = data.loc[is_flagged, property_columns].assign(**{"Kept, but": reasons(data.index[is_flagged], other_rules)})
     if is_removed.all():
-        st.error("Every property was removed by the rules you chose:")
+        st.error("Every property was removed:")
         st.dataframe(removed, hide_index=True)
         st.stop()
 
@@ -152,6 +164,7 @@ if st.button("Run cleaning and preprocessing", type="primary", disabled=property
         "preprocessing_report": preprocessing_report,
         "removed": removed,
         "flagged": flagged,
+        "start_date": preprocessing_settings["start_date"],
     }
     st.rerun()  # Refresh so the "Test data in memory" message at the top shows the new data.
 
@@ -168,18 +181,21 @@ if "test_data" in st.session_state:
         preprocessing_steps.show_report(run["preprocessing_report"])
 
     if len(run["removed"]):
-        st.warning(f"{len(run['removed'])} properties were removed by the rules you chose and won't get a prediction:")
+        st.warning(f"{len(run['removed'])} properties were removed and won't get a prediction:")
         st.dataframe(run["removed"], hide_index=True)
     if len(run["flagged"]):
         st.info(f"{len(run['flagged'])} properties break a rule you didn't choose, so they were kept:")
         st.dataframe(run["flagged"], hide_index=True)
 
+    st.caption("Kept in memory for the Predictions page. Download a copy only if you want to keep it.")
     left, right, _ = st.columns([1, 1, 2])
     left.download_button("Download test CSV", data=test_data.to_csv(index=False).encode("utf-8"),
-                         file_name=run["csv_name"], mime="text/csv", type="primary")
+                         file_name=run["csv_name"], mime="text/csv")
     right.download_button("Download cleaned Excel", data=run["cleaned_bytes"],
                           file_name=run["csv_name"].removesuffix(".csv") + " (cleaned).xlsx",
                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
+    st.page_link("pages/4_Predictions.py", label="Next: Predictions", icon="🔮")
+
     st.header("Preview of the test data")
-    preprocessing_steps.show_preview(test_data, reference_columns=st.session_state["test_data_properties"])
+    preprocessing_steps.show_preview(test_data, run["start_date"], reference_columns=st.session_state["test_data_properties"])

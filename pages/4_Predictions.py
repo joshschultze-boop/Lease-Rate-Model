@@ -1,6 +1,7 @@
 # pages/4_Predictions.py
-# Fits a model on the training CSV and predicts the test data:
-#   1-2. Upload the training CSV and choose the predictor and target columns from its headers
+# Fits a model on the training data and predicts the test data:
+#   1-2. Choose the training data (from the Preprocess page, or an uploaded CSV) and its predictor
+#        and target columns
 #   3.   Choose the test data (from the Test Data page, or an uploaded CSV with or without rent)
 #   4.   Choose a model and its parameters, then fit and predict
 #   5.   Results: errors (when the test data has actual rent), column checkboxes, and a download
@@ -29,6 +30,8 @@ DEFAULT_TARGET = "Monthly Rent"
 # Columns checked to start with in the results (others can be checked below the results).
 SHOWN_TO_START = ["Full Address", "Predicted {target}", "Actual {target}"]
 
+FROM_PREPROCESS_PAGE = "Training data from the Preprocess page"
+UPLOAD_TRAINING_CSV = "Upload a training CSV"
 FROM_TEST_DATA_PAGE = "Test data from the Test Data page"
 UPLOAD_TEST_CSV = "Upload a test CSV"
 
@@ -55,11 +58,18 @@ def choose_data_and_model():
     """Sections 1-4. Returns the choices, or None (with a message) if something is still missing."""
 
     st.header("1. Training data")
-    training_file = st.file_uploader("Preprocessed training CSV (from the Preprocess page)", type=["csv"])
-    if training_file is None:
-        st.info("Upload the training CSV to continue.")
-        return None
-    training = read_csv_as_text(training_file)
+    preprocess_result = st.session_state.get("preprocess_result")
+    sources = ([FROM_PREPROCESS_PAGE] if preprocess_result else []) + [UPLOAD_TRAINING_CSV]
+    if st.radio("Training data", sources, horizontal=True) == FROM_PREPROCESS_PAGE:
+        training, training_name = read_csv_as_text(preprocess_result["data"]), preprocess_result["file_name"]
+        st.caption(f"Using **{training_name}**, made on the Preprocess page in this session.")
+    else:
+        training_file = st.file_uploader("Preprocessed training CSV (from the Preprocess page)", type=["csv"])
+        if training_file is None:
+            st.info("Run the Preprocess page first (its result is used here automatically), "
+                    "or upload a training CSV you downloaded earlier.")
+            return None
+        training, training_name = read_csv_as_text(training_file), training_file.name
     headers = list(training.columns)
     st.caption(f"{len(training)} rows and {len(headers)} columns.")
 
@@ -68,7 +78,7 @@ def choose_data_and_model():
     left, right = st.columns(2)
     defaults = lambda columns: [column for column in columns if column in headers]
     numerical = left.multiselect("Numerical predictors", headers, default=defaults(DEFAULT_NUMERICAL))
-    dates = left.multiselect("Date predictors (days since 1950-01-01)", headers, default=defaults(DEFAULT_DATE))
+    dates = left.multiselect("Date predictors (days since the Preprocess start date)", headers, default=defaults(DEFAULT_DATE))
     categorical = right.multiselect("Categorical predictors", headers, default=defaults(DEFAULT_CATEGORICAL))
     target = right.selectbox("Target column (what to predict)", headers, placeholder="Choose the target",
                              index=headers.index(DEFAULT_TARGET) if DEFAULT_TARGET in headers else None)
@@ -100,7 +110,8 @@ def choose_data_and_model():
     else:
         test_file = st.file_uploader("Preprocessed test CSV (with or without the target column)", type=["csv"])
         if test_file is None:
-            st.info("Upload a test CSV to continue, or make test data on the Test Data page.")
+            st.info("Make test data on the Test Data page (it's used here automatically), "
+                    "or upload a test CSV you downloaded earlier.")
             return None
         test, properties, test_name = read_csv_as_text(test_file), None, test_file.name
 
@@ -128,7 +139,7 @@ def choose_data_and_model():
 
     return {
         "run_clicked": st.button("Fit model and predict", type="primary"),
-        "training": training, "test": test, "test_name": test_name, "properties": properties, "has_actual": has_actual,
+        "training": training, "training_name": training_name, "test": test, "test_name": test_name, "properties": properties, "has_actual": has_actual,
         "numerical": numerical, "dates": dates, "categorical": categorical, "target": target,
         "model_name": model_name, "model": model, "parameters": parameters, "min_frequency": min_frequency,
     }
@@ -177,7 +188,7 @@ def fit_and_save(choices):
         "summary": (
             f"From the last run: **{choices['model_name']}** ("
             + ", ".join(f"{model.PARAMETERS[name]['label']} = {value}" for name, value in choices["parameters"].items())
-            + f"). Trained on {fit['training_rows']} rows"
+            + f"). Trained on {fit['training_rows']} rows of {choices['training_name']}"
             + (f" ({fit['skipped_training_rows']} rows with no {target} were skipped)" if fit["skipped_training_rows"] else "")
             + f", using {fit['model_predictors']} predictors after preparing the data. "
             f"Predicted {len(results)} rows of {choices['test_name']}."
