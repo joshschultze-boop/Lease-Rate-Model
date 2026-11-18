@@ -7,8 +7,9 @@ always come out in exactly the same format. Each page calls:
     run_steps()            -> runs them
     show_report() / show_preview() -> shows how each step went, and the columns that will be saved
 
-has_rent=False is for test data with no Monthly Rent: every step runs the same way,
-except the parts that use Monthly Rent.
+has_rent=False is for test data with no Monthly Rent: every step runs the same way, except the
+rent parts and the training data's row filters (TRAINING_ONLY_STEPS). The Test Data page has its
+own row rules instead (find_row_problems), so it removes only the rows you choose and says why.
 """
 
 import pandas as pd
@@ -86,6 +87,53 @@ ALL_STEPS = [
     LEASE_LENGTH_UNKNOWN, REMOVE_ROWS, REMOVE_ABOVE_MAXIMUMS, DROP_COLUMNS, ROUND, RATIOS, ZERO_FILL, LOG_TRANSFORMS,
 ]
 
+# Never run on test data (no rent): the rent conversion, and the training data's row filters.
+TRAINING_ONLY_STEPS = [CLEAN_TARGET, REMOVE_ROWS, REMOVE_ABOVE_MAXIMUMS]
+
+
+# ---------------------------------------------------------------------
+# Row rules for test data (the Test Data page chooses which to apply)
+# ---------------------------------------------------------------------
+# Judged the same way as the training filters in steps 8-9, but with the Test Data page's own limits.
+
+MISSING_REQUIRED = "Are missing required information"
+STATE_NOT_KEPT = "Are in a state not in the list"
+BCR_ABOVE_LIMIT = "Have Lease BCR above the limit"
+YEAR_BUILT_TOO_HIGH = f"Have Year Built above {YEAR_BUILT_MAXIMUM}"
+ROW_RULES = [MISSING_REQUIRED, STATE_NOT_KEPT, BCR_ABOVE_LIMIT, YEAR_BUILT_TOO_HIGH]
+
+
+def find_row_problems(table, states_to_keep, lease_bcr_maximum):
+    """
+    For each row of cleaned data, why each rule would remove it ("" when the row passes).
+    One column per rule in ROW_RULES, e.g. "Missing CBSA, County" or "Lease BCR 0.40 is above 0.25".
+    """
+    problems = pd.DataFrame("", index=table.index, columns=ROW_RULES)
+
+    # Required info: number columns must hold a number; other columns can't be blank or "unknown".
+    def is_missing(column):
+        if column in NUMERICAL_COLUMNS:
+            return pd.to_numeric(table[column], errors="coerce").isna()
+        return table[column].isna() | table[column].astype("string").str.strip().str.casefold().eq("unknown").fillna(False)
+
+    missing = pd.DataFrame({column: is_missing(column) for column in REQUIRED_COLUMNS})
+    for row in table.index[missing.any(axis=1)]:
+        problems.at[row, MISSING_REQUIRED] = "Missing " + ", ".join(missing.columns[missing.loc[row]])
+
+    state_out = table["State"].isin([state for state in ALL_STATES if state not in states_to_keep])
+    problems.loc[state_out, STATE_NOT_KEPT] = "State is " + table.loc[state_out, "State"].astype(str)
+
+    bcr = pd.to_numeric(table["Lease BCR"], errors="coerce")
+    over = bcr > lease_bcr_maximum
+    problems.loc[over, BCR_ABOVE_LIMIT] = bcr[over].map(lambda value: f"Lease BCR {value:.2f} is above {lease_bcr_maximum:g}")
+
+    year_built = pd.to_numeric(table["Year Built"], errors="coerce")
+    too_high = year_built > YEAR_BUILT_MAXIMUM
+    problems.loc[too_high, YEAR_BUILT_TOO_HIGH] = year_built[too_high].map(
+        lambda value: f"Year Built {value:g} is above {YEAR_BUILT_MAXIMUM}")
+
+    return problems
+
 
 # ---------------------------------------------------------------------
 # Choosing columns and steps (shown on the page)
@@ -105,19 +153,20 @@ def select_model_columns(table, has_rent, extra_columns=()):
 
 def choose_steps(has_rent):
     """Show the step list, the order they'll run in, and the settings. Returns (chosen steps, settings)."""
-    chosen = st.multiselect("Preprocessing steps", ALL_STEPS, default=ALL_STEPS)
-    in_order = [step for step in ALL_STEPS if step in chosen and (has_rent or step != CLEAN_TARGET)]
+    options = ALL_STEPS if has_rent else [step for step in ALL_STEPS if step not in TRAINING_ONLY_STEPS]
+    chosen = st.multiselect("Preprocessing steps", options, default=options)
+    in_order = [step for step in options if step in chosen]
     if in_order:
         st.markdown("**These steps will run in this order:**\n" + "\n".join(f"{n}. {s}" for n, s in enumerate(in_order, 1)))
 
     st.write("**Settings**")
-    settings = {
-        "states_to_keep": st.multiselect("Keep rows from these states", ALL_STATES, default=["CO"]),
-        "lease_bcr_maximum": st.number_input("Remove rows with Lease BCR above", min_value=0.0, value=0.25, step=0.05),
-        "log_method": st.radio("Log columns", list(LOG_METHOD_NAMES), format_func=LOG_METHOD_NAMES.get, horizontal=True),
-    }
-    if REMOVE_ROWS in chosen and not settings["states_to_keep"]:
-        st.warning("No states are selected to keep, so every row will be removed.")
+    settings = {}
+    if has_rent:  # Row filters are for training data only.
+        settings["states_to_keep"] = st.multiselect("Keep rows from these states", ALL_STATES, default=["CO"])
+        settings["lease_bcr_maximum"] = st.number_input("Remove rows with Lease BCR above", min_value=0.0, value=0.25, step=0.05)
+        if REMOVE_ROWS in chosen and not settings["states_to_keep"]:
+            st.warning("No states are selected to keep, so every row will be removed.")
+    settings["log_method"] = st.radio("Log columns", list(LOG_METHOD_NAMES), format_func=LOG_METHOD_NAMES.get, horizontal=True)
     return chosen, settings
 
 
@@ -131,6 +180,8 @@ def run_steps(df, chosen_steps, settings, has_rent):
     Returns (finished data, report). The report has one (icon, step, rows after, note) per step.
     """
     report = []
+    if not has_rent:
+        chosen_steps = [step for step in chosen_steps if step not in TRAINING_ONLY_STEPS]
 
     def run_step(step_name, df, step_function, **arguments):
         # A failed step is recorded and the data passes on unchanged, so the rest still run.
@@ -146,8 +197,8 @@ def run_steps(df, chosen_steps, settings, has_rent):
     # With no rent, Monthly Rent is left out of rounding (step 11) and logs (step 14).
     not_rent = lambda columns: columns if has_rent else [c for c in columns if c not in TARGET_COLUMNS]
 
-    # 1. Rent must be a number before rows with $0 rent can be removed (step 8). Skipped with no rent.
-    if CLEAN_TARGET in chosen_steps and has_rent:
+    # 1. Rent must be a number before rows with $0 rent can be removed (step 8).
+    if CLEAN_TARGET in chosen_steps:
         df = run_step(CLEAN_TARGET, df, clean_target_columns, target_columns=TARGET_COLUMNS)
 
     # 2-4. Combine columns. BEFORE step 5 (same as your script), so a combined value is blank
@@ -173,11 +224,13 @@ def run_steps(df, chosen_steps, settings, has_rent):
         df = run_step(LEASE_LENGTH_UNKNOWN, df, add_unknown_indicator,
                       columns="Lease Length (Months)", new_column="Lease Length Unknown")
 
-    # 8. Remove rows with $0 or blank rent (only when there is rent), rows from states not kept,
+    # 8. Remove rows with $0 or blank rent, rows from states not kept,
     #    and rows that are blank or "unknown" in a required column.
     if REMOVE_ROWS in chosen_steps:
-        exclude_values = {"Monthly Rent": [0, None]} if has_rent else {}
-        exclude_values["State"] = [state for state in ALL_STATES if state not in settings["states_to_keep"]]
+        exclude_values = {
+            "Monthly Rent": [0, None],
+            "State": [state for state in ALL_STATES if state not in settings["states_to_keep"]],
+        }
         df = run_step(REMOVE_ROWS, df, clean_dataframe, exclude_values=exclude_values, required_columns=REQUIRED_COLUMNS)
 
     # 9. Needs numbers (step 5) and needs Lease BCR, so it runs before step 10.
