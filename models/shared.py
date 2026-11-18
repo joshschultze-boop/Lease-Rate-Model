@@ -134,7 +134,7 @@ def run_model(model, parameters, training, test, numerical_columns, date_columns
     Everything between the CSVs and the model:
       1. Training rows need a target value.
       2. Keep the predictor columns. Number and date columns become numbers
-         (dates are already "days since 1950-01-01" from the Preprocess page).
+         (dates are already "days since the start date" chosen on the Preprocess page).
       3. Prepare the data, learned from the training rows only, the way the model asks for it.
       4. Fit the model and predict the test rows.
     Returns a dictionary with the predictions, the model's details table (or None), and counts.
