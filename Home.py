@@ -17,14 +17,14 @@ st.session_state.setdefault("new_entries", [])
 
 PAGES = [
     ("pages/1_Clean_Data.py", "Clean Data", "🧹",
-     "Adds your new entries, runs the cleaning steps you choose, and downloads the cleaned Excel file."),
+     "Adds your new entries and runs the cleaning steps you choose."),
     ("pages/2_Preprocess.py", "Preprocess", "📊",
-     "Upload a cleaned sheet, choose the preprocessing steps, and download a CSV for the model."),
+     "Turns the cleaned sheet (or one you upload) into training data for the models."),
     ("pages/3_Test_Data.py", "Test Data", "🧪",
      "Upload or type in properties to predict (no rent needed). They're cleaned and preprocessed the same way "
      "as your training data and kept in memory for the models."),
     ("pages/4_Predictions.py", "Predictions", "🔮",
-     "Fit a model on your training CSV and predict rent for your test data, with errors when it has actual rent."),
+     "Fit a model on your training data and predict rent for your test data, with errors when it has actual rent."),
 ]
 
 
@@ -73,6 +73,12 @@ show_entries(st.session_state["new_entries"], "added to the bottom of your sheet
 # --- 3. Pages ---
 
 st.header("3. Next steps")
+st.info(
+    "Each page keeps its result in memory while this tab is open, and the next page picks it up "
+    "automatically: Clean Data → Preprocess → Test Data → Predictions. You don't need to download "
+    "anything to move between pages. Downloads are for keeping a copy, or for a later session: "
+    "if you already have your training CSV, you can go straight to Predictions and upload it there."
+)
 for page, label, icon, description in PAGES:
     st.page_link(page, label=label, icon=icon)
     st.caption(description)
