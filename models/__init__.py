@@ -51,12 +51,17 @@ random_state is the seed chosen on the Predictions page (typed in, or new each f
 receives it; a model with no randomness simply doesn't use it. Don't add a seed to PARAMETERS.
 """
 
-from models import best_subset_linear, gam, lasso, neural_network, neural_network_keras, ridge
+from models import (
+    best_subset_linear, best_subset_polynomial, gam, lasso, neural_network, neural_network_keras, pcr, pls, ridge,
+)
 
 MODEL_FILES = [
     best_subset_linear,
+    best_subset_polynomial,
     lasso,
     ridge,
+    pcr,
+    pls,
     gam,
     neural_network,
     neural_network_keras,
