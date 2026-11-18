@@ -6,3 +6,5 @@ geopandas>=1.0
 shapely>=2.0
 scikit-learn>=1.2
 abess>=0.4.7
+pygam>=0.9
+tensorflow-cpu>=2.16

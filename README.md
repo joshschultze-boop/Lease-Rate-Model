@@ -24,9 +24,14 @@ keeps *what* a step does separate from *which* steps run and in what order.
 | `cleaning/template.py` | The comp sheet's columns, and adding new entries to a sheet |
 | `preprocessing/functions.py` | What each preprocessing step does (your preprocessing functions) |
 | `preprocessing/steps.py` | Which preprocessing steps exist, their settings and order, running them, and the CSV preview (pages 2 and 3) |
-| `models/__init__.py` | The list of models, and how to add one |
-| `models/shared.py` | What every model shares: reading CSVs, preparing the data, fitting, and errors |
-| `models/best_subset_linear.py` | Best subset linear regression (ABESS) |
+| `models/__init__.py` | The list of models, how to add one, and the parameter types (including tables) |
+| `models/shared.py` | What every model shares: reading CSVs, preparing the data, fitting, model details, and errors |
+| `models/best_subset_linear.py` | Best subset linear regression (ABESS), from Best Subset - Linear.ipynb |
+| `models/lasso.py` | Lasso regression, from Lasso.ipynb |
+| `models/ridge.py` | Ridge regression, from Ridge.ipynb |
+| `models/gam.py` | GAM with a spline table (pyGAM), from GAM.ipynb |
+| `models/neural_network.py` | Neural network with a layer table (Keras), from Nueral_Net.ipynb |
+| `models/neural_network_keras.py` | Neural network with a layer table (Keras), from Nueral_Net - Keras.ipynb |
 | `data/` | Census CBSA files and 2025 TIGER/Line primary roads |
 
 The road lines were simplified to about 2 meters so the `.shp` file fits under GitHub's 25 MB
@@ -36,6 +41,10 @@ upload limit. Distances measured from 200 test points changed by at most 5.4 fee
 
 See `models/__init__.py`: add a file to `models/`, add one line to the list there, and add
 any new packages to `requirements.txt`. The Predictions page doesn't change.
+
+Every model file has the same parts in the same order, and every setting its notebook passes to
+the model is a parameter on the page, with the notebook's value as the default (or, where the
+notebook tuned it, the lowest-RMSE value from that tuning). Each parameter's help text says which.
 
 ## Run on your own computer
 
