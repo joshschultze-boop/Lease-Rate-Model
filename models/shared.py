@@ -172,6 +172,36 @@ def run_model(model, parameters, training, test, numerical_columns, date_columns
 
 
 # ---------------------------------------------------------------------
+# Model details (shared by the linear models, so their tables look the same)
+# ---------------------------------------------------------------------
+
+def coefficient_table(predictors, coefficients, intercept, keep_zeros=False):
+    """
+    The intercept, then each predictor's coefficient, largest effect first.
+    Coefficients are per 1 standard deviation of each predictor (the models standardize first),
+    so they can be compared with each other. Zero coefficients are left out unless keep_zeros=True.
+    """
+    coefficient = "Coefficient (per 1 standard deviation)"
+    table = pd.DataFrame({"Predictor": list(predictors), coefficient: np.ravel(coefficients).astype(float)})
+    if not keep_zeros:
+        table = table.loc[table[coefficient] != 0]
+    table = table.sort_values(coefficient, key=abs, ascending=False)
+    intercept_row = pd.DataFrame({"Predictor": ["(intercept)"], coefficient: [float(np.ravel(intercept)[0])]})
+    return pd.concat([intercept_row, table], ignore_index=True)
+
+
+def network_summary(layer_settings, history, early_stopping):
+    """For the neural networks: the layers used and how training went (from the Keras fit history)."""
+    rows = [
+        ("Hidden layers: neurons (dropout)", ", ".join(f"{n} ({d:g})" for n, d in layer_settings) or "none"),
+        ("Epochs trained", len(history.history["loss"])),
+    ]
+    if early_stopping:
+        rows.append(("Lowest validation loss at epoch", int(np.argmin(history.history["val_loss"])) + 1))
+    return pd.DataFrame({"Setting": [name for name, _ in rows], "Value": [str(value) for _, value in rows]})
+
+
+# ---------------------------------------------------------------------
 # Errors
 # ---------------------------------------------------------------------
 
