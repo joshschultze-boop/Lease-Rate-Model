@@ -61,7 +61,13 @@ YEAR_BUILT_MAXIMUM = 9999
 EXCLUDE_COLUMNS = ["Lease BCR"]  # Used to filter rows, then left out of the CSV.
 ROUND_COLUMNS = ["Monthly Rent", "Distance to Interstate"]
 ZERO_FILL_COLUMNS = ["Lease Building (SF)", "Property Building (SF)"]
+# Log columns: the default choice (your preprocessing script's log_columns), and every column that can be chosen.
+# Each chosen column gets a new "<column>_log1p" (or "_log") column; the original stays.
 LOG_COLUMNS = ["Lease Building (SF)", "Yard Size (AC)", "Property Building (SF)", "Property (AC)", "Monthly Rent"]
+RATIO_COLUMNS = ["yard / prop ratio (acres)", "yard / prop ratio (sf)"]  # made by the ratios step (step 12)
+LOG_COLUMN_OPTIONS = LOG_COLUMNS + [  # every number column except Lease BCR (left out of the CSV), plus the ratios
+    column for column in NUMERICAL_COLUMNS + RATIO_COLUMNS if column not in LOG_COLUMNS + EXCLUDE_COLUMNS
+]
 
 ALL_STATES = sorted(set(STATE_FIPS_TO_ABBR.values()))
 LOG_METHOD_NAMES = {"log1p": "log1p: ln(1 + x), zeros stay 0", "log": "log: ln(x), zeros become blank"}
@@ -180,7 +186,21 @@ def choose_steps(has_rent, start=None):
                                                         value=start_settings.get("lease_bcr_maximum", 0.25))
         if REMOVE_ROWS in chosen and not settings["states_to_keep"]:
             st.warning("No states are selected to keep, so every row will be removed.")
-    settings["log_method"] = st.radio("Log columns", list(LOG_METHOD_NAMES), format_func=LOG_METHOD_NAMES.get,
+    # Log columns. Test data (no rent) can't log Monthly Rent, so it isn't offered there.
+    log_options = [column for column in LOG_COLUMN_OPTIONS if has_rent or column not in TARGET_COLUMNS]
+    settings["log_columns"] = st.multiselect(
+        "Log columns: add a log version of these columns", log_options,
+        default=[column for column in start_settings.get("log_columns", LOG_COLUMNS) if column in log_options],
+        help="Each one gets a new column (e.g. \"Yard Size (AC)_log1p\"); the original column stays. "
+             "Values that can't be logged (0 or less for log, -1 or less for log1p) become blank. "
+             "Default: your preprocessing script's log_columns.",
+    )
+    if LOG_TRANSFORMS in chosen and not settings["log_columns"]:
+        st.caption("No log columns are chosen, so the log step won't add any.")
+    if LOG_TRANSFORMS in chosen and RATIOS not in chosen and set(settings["log_columns"]) & set(RATIO_COLUMNS):
+        st.warning(f"The ratio columns only exist when “{RATIOS}” runs. Add that step, or remove the ratios "
+                   "from the log columns.")
+    settings["log_method"] = st.radio("Log method", list(LOG_METHOD_NAMES), format_func=LOG_METHOD_NAMES.get,
                                       index=list(LOG_METHOD_NAMES).index(start_settings.get("log_method", "log1p")),
                                       horizontal=True)
     settings["start_date"] = st.date_input(
@@ -280,7 +300,12 @@ def run_steps(df, chosen_steps, settings, has_rent):
 
     # 14. New columns named like "Monthly Rent_log1p". The original columns stay.
     if LOG_TRANSFORMS in chosen_steps:
-        df = run_step(LOG_TRANSFORMS, df, add_log_transforms, columns=not_rent(LOG_COLUMNS), method=settings["log_method"])
+        # The chosen columns, always in the order of LOG_COLUMN_OPTIONS (however they were clicked), so the new
+        # log columns line up between training and test data.
+        chosen_log_columns = settings.get("log_columns", LOG_COLUMNS)
+        columns_to_log = not_rent([column for column in LOG_COLUMN_OPTIONS if column in chosen_log_columns])
+        if columns_to_log:
+            df = run_step(LOG_TRANSFORMS, df, add_log_transforms, columns=columns_to_log, method=settings["log_method"])
 
     return df, report
 
