@@ -5,19 +5,15 @@
 #   "file_bytes", "file_name", "sheet_name"  -> the uploaded Excel file and the sheet to use
 #   "new_entries"                            -> new rows typed in below (each row is a dictionary)
 
-from datetime import date
 from io import BytesIO
 
 import pandas as pd
 import streamlit as st
 
-from cleaning.functions import STATE_FIPS_TO_ABBR
-from cleaning.template import ALL_TEMPLATE_COLUMNS, OPTIONAL_COLUMNS, REQUIRED_COLUMNS
+from cleaning.template import ALL_TEMPLATE_COLUMNS, OPTIONAL_COLUMNS, REQUIRED_COLUMNS, entry_form, show_entries
 
 st.set_page_config(page_title="Lease Comps", page_icon="🏗️", layout="wide")
 st.session_state.setdefault("new_entries", [])
-
-STATE_OPTIONS = sorted(set(STATE_FIPS_TO_ABBR.values()))
 
 PAGES = [
     ("pages/1_Clean_Data.py", "Clean Data", "🧹",
@@ -25,38 +21,11 @@ PAGES = [
     ("pages/2_Preprocess.py", "Preprocess", "📊",
      "Upload a cleaned sheet, choose the preprocessing steps, and download a CSV for the model."),
     ("pages/3_Test_Data.py", "Test Data", "🧪",
-     "Upload new properties with no rent. They're cleaned and preprocessed the same way as your training data "
-     "and kept in memory for the models."),
+     "Upload or type in properties to predict (no rent needed). They're cleaned and preprocessed the same way "
+     "as your training data and kept in memory for the models."),
     ("pages/4_Predictions.py", "Predictions", "🔮",
      "Fit a model on your training CSV and predict rent for your test data, with errors when it has actual rent."),
 ]
-
-
-def entry_box(label, kind):
-    """Show the right kind of input box for a column and return what was entered (None if blank)."""
-    if kind == "text":
-        return st.text_input(label).strip() or None
-    if kind == "state":
-        return st.selectbox(label, STATE_OPTIONS, index=None, placeholder="Choose a state")
-    if kind == "number":
-        return st.number_input(label, min_value=0.0, value=None)
-    if kind == "whole number":
-        return st.number_input(label, min_value=0, step=1, value=None)
-    if kind == "coordinate":
-        return st.number_input(label, value=None, format="%.6f")
-    if kind == "date":
-        return st.date_input(label, value=None, min_value=date(1950, 1, 1), max_value=date(2100, 12, 31))
-    raise ValueError(f"Unknown input kind: {kind}")
-
-
-def entry_boxes(columns, required):
-    """One box per column, spread across three side-by-side columns."""
-    page_columns = st.columns(3)
-    values = {}
-    for position, (column_name, kind) in enumerate(columns.items()):
-        with page_columns[position % 3]:
-            values[column_name] = entry_box(column_name + (" *" if required else ""), kind)
-    return values
 
 
 st.title("🏗️ Lease Comps")
@@ -97,32 +66,8 @@ st.header("2. Add new entries (optional)")
 st.caption("Fields marked * are required. The form keeps your values after you add an entry, "
            "so entering several leases at the same property is quick.")
 
-with st.form("new_entry_form"):
-    st.subheader("Required")
-    new_entry = entry_boxes(REQUIRED_COLUMNS, required=True)
-    with st.expander("Optional, but recommended"):
-        new_entry.update(entry_boxes(OPTIONAL_COLUMNS, required=False))
-    add_clicked = st.form_submit_button("Add entry", type="primary")
-
-if add_clicked:
-    missing_required = [name for name in REQUIRED_COLUMNS if new_entry[name] is None]
-    if missing_required:
-        st.error("Fill in these required fields first: " + ", ".join(missing_required))
-    else:
-        st.session_state["new_entries"].append(new_entry)
-        st.success(f"Added {new_entry['Street Address']}, {new_entry['City']}.")
-
-new_entries = st.session_state["new_entries"]
-if new_entries:
-    st.write(f"**New entries ({len(new_entries)})**: added to the bottom of your sheet when you run the cleaning.")
-    st.dataframe(pd.DataFrame(new_entries), hide_index=True)
-    remove_column, clear_column, _ = st.columns([1, 1, 4])
-    if remove_column.button("Remove last entry"):
-        new_entries.pop()
-        st.rerun()
-    if clear_column.button("Clear all entries"):
-        new_entries.clear()
-        st.rerun()
+entry_form("new_entry_form", REQUIRED_COLUMNS, OPTIONAL_COLUMNS, st.session_state["new_entries"])
+show_entries(st.session_state["new_entries"], "added to the bottom of your sheet when you run the cleaning.")
 
 
 # --- 3. Pages ---
