@@ -22,13 +22,13 @@ SEED_USED_FOR = None   # ABESS fits the one support size given with no randomnes
 
 PARAMETERS = {
     "degree": {
-        "label": "Degree", "type": "int", "default": 1, "min": 1, "max": 3,
+        "label": "Degree", "type": "int", "default": 2, "min": 1, "max": 3,
         "help": "1 = the predictors themselves; 2 adds squares and every pair of predictors multiplied together; "
                 "3 adds cubes and triples. 3 makes a very large number of terms and can be slow. "
-                "Notebook: 1, the lowest RMSE in your grid search.",
+                "Notebook: 2, the lowest RMSE in your grid search.",
     },
     "support_size": {
-        "label": "Support size (number of terms kept)", "type": "int", "default": 7, "min": 0,
+        "label": "Support size (number of terms kept)", "type": "int", "default": 10, "min": 0,
         "help": "Counts each polynomial term and one-hot column separately. Notebook: chosen inside each fit by "
                 "cross-validation, from 0 up to max_selected_terms; 7 was the lowest-RMSE maximum in your grid search.",
     },
