@@ -19,9 +19,9 @@ SEED_USED_FOR = "the sag and saga solvers only (the default svd solver has no ra
 
 PARAMETERS = {
     "alpha": {
-        "label": "Alpha (L2 penalty)", "type": "float", "default": 17.851628990783755, "min": 0.0, "step": 0.1,
+        "label": "Alpha (L2 penalty)", "type": "float", "default": 70, "min": 0.0, "step": 0.1,
         "format": "%.4f",
-        "help": "Higher values shrink coefficients more. Notebook: 17.85, the lowest RMSE in your grid search.",
+        "help": "Higher values shrink coefficients more. Notebook: 70, the lowest RMSE in your grid search.",
     },
     "solver": {
         "label": "Solver", "type": "choice",
