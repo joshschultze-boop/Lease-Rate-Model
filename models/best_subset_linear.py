@@ -20,11 +20,11 @@ SEED_USED_FOR = None   # ABESS fits the one support size given with no randomnes
 
 PARAMETERS = {
     "support_size": {
-        "label": "Support size (number of predictors kept)", "type": "int", "default": 27, "min": 0,
+        "label": "Support size (number of predictors kept)", "type": "int", "default": 6, "min": 0,
         "help": "Counts each one-hot column separately. Notebook: 6, the lowest RMSE in your grid search.",
     },
     "alpha": {
-        "label": "Alpha (ridge penalty)", "type": "float", "default": 1.0, "min": 0.0, "step": 0.01, "format": "%.4f",
+        "label": "Alpha (ridge penalty)", "type": "float", "default": 0.130045, "min": 0.0, "step": 0.01, "format": "%.4f",
         "help": "0 means no penalty. Notebook: 0.130045, the lowest RMSE in your grid search.",
     },
 }
