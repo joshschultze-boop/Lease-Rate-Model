@@ -3,6 +3,7 @@
 The Clean Data and Test Data pages both use this file, so training data and test data
 are always cleaned exactly the same way. Each page calls:
     choose_steps()   -> shows the step list and settings, returns your choices
+                        (start=... begins from earlier choices, e.g. the last Clean Data run)
     clean_excel()    -> cleans a copy of an Excel file with those choices
     show_report()    -> shows how each step went
 """
@@ -79,9 +80,15 @@ ALL_STEPS = [
 # Choosing steps (shown on the page)
 # ---------------------------------------------------------------------
 
-def choose_steps():
-    """Show the step list, the order they'll run in, and the settings. Returns (chosen steps, settings)."""
-    chosen = st.multiselect("Cleaning steps", ALL_STEPS, default=ALL_STEPS)
+def choose_steps(start=None):
+    """
+    Show the step list, the order they'll run in, and the settings. Returns (chosen steps, settings).
+    start: earlier choices to begin from ({"steps": [...], "settings": {...}}), or None for the defaults.
+    """
+    start_steps = (start or {}).get("steps", ALL_STEPS)
+    start_settings = (start or {}).get("settings", {})
+
+    chosen = st.multiselect("Cleaning steps", ALL_STEPS, default=start_steps)
     in_order = [step for step in ALL_STEPS if step in chosen]
     if in_order:
         st.markdown("**These steps will run in this order:**\n" + "\n".join(f"{n}. {s}" for n, s in enumerate(in_order, 1)))
@@ -90,12 +97,14 @@ def choose_steps():
 
     st.write("**Settings**")
     settings = {
-        "generate_script_address": st.checkbox("Geocoding: also fill Script Address and County", value=True),
+        "generate_script_address": st.checkbox("Geocoding: also fill Script Address and County",
+                                               value=start_settings.get("generate_script_address", True)),
         "highway_types": st.multiselect(
-            "Distance to highway: road types to measure to", list(HIGHWAY_TYPE_NAMES), default=["I"],
-            format_func=HIGHWAY_TYPE_NAMES.get,
+            "Distance to highway: road types to measure to", list(HIGHWAY_TYPE_NAMES),
+            default=start_settings.get("highway_types", ["I"]), format_func=HIGHWAY_TYPE_NAMES.get,
         ),
-        "zoning_character": st.text_input("Zoning: character to standardize codes with", value="-"),
+        "zoning_character": st.text_input("Zoning: character to standardize codes with",
+                                          value=start_settings.get("zoning_character", "-")),
     }
     return chosen, settings
 
