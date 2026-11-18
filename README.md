@@ -17,8 +17,8 @@ keeps *what* a step does separate from *which* steps run and in what order.
 | `Home.py` | Upload a comp sheet and add new entries |
 | `pages/1_Clean_Data.py` | Clean the comp sheet and download it |
 | `pages/2_Preprocess.py` | Turn a cleaned sheet (with rent) into a CSV for the models |
-| `pages/3_Test_Data.py` | Clean and preprocess new properties (no rent) and keep them in memory |
-| `pages/4_Predictions.py` | Choose columns and a model, predict the test data, inspect and download the results |
+| `pages/3_Test_Data.py` | Clean and preprocess properties to predict and keep them in memory (any actual rents are kept for comparing) |
+| `pages/4_Predictions.py` | Choose columns, a random seed, and a model, predict the test data, report errors where actual rent is known, inspect and download the results |
 | `cleaning/functions.py` | What each cleaning step does (your cleaning functions) |
 | `cleaning/steps.py` | Which cleaning steps exist, their settings and order, and running them (pages 1 and 3) |
 | `cleaning/template.py` | The comp sheet's columns, and adding new entries to a sheet |
@@ -45,6 +45,8 @@ any new packages to `requirements.txt`. The Predictions page doesn't change.
 Every model file has the same parts in the same order, and every setting its notebook passes to
 the model is a parameter on the page, with the notebook's value as the default (or, where the
 notebook tuned it, the lowest-RMSE value from that tuning). Each parameter's help text says which.
+The random seed is one setting on the Predictions page for every model (a new seed each fit, or
+one you type in); each model file receives it as `random_state` and says what it uses it for.
 
 ## Run on your own computer
 
