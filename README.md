@@ -27,8 +27,11 @@ keeps *what* a step does separate from *which* steps run and in what order.
 | `models/__init__.py` | The list of models, how to add one, and the parameter types (including tables) |
 | `models/shared.py` | What every model shares: reading CSVs, preparing the data, fitting, model details, and errors |
 | `models/best_subset_linear.py` | Best subset linear regression (ABESS), from Best Subset - Linear.ipynb |
+| `models/best_subset_polynomial.py` | Best subset polynomial regression (ABESS), from Best Subset - Polynomial.ipynb |
 | `models/lasso.py` | Lasso regression, from Lasso.ipynb |
 | `models/ridge.py` | Ridge regression, from Ridge.ipynb |
+| `models/pcr.py` | Principal component regression, from PCR.ipynb |
+| `models/pls.py` | Partial least squares regression, from PLS.ipynb |
 | `models/gam.py` | GAM with a spline table (pyGAM), from GAM.ipynb |
 | `models/neural_network.py` | Neural network with a layer table (Keras), from Nueral_Net.ipynb |
 | `models/neural_network_keras.py` | Neural network with a layer table (Keras), from Nueral_Net - Keras.ipynb |
