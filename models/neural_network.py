@@ -51,16 +51,16 @@ PARAMETERS = {
         "help": "Notebook: 500.",
     },
     "learning_rate": {
-        "label": "Learning rate", "type": "float", "default": 0.0001, "min": 0.0, "step": 0.0001, "format": "%.5f",
-        "help": "Adam optimizer step size. Notebook: 0.0001.",
+        "label": "Learning rate", "type": "float", "default": 0.0005, "min": 0.0, "step": 0.0001, "format": "%.5f",
+        "help": "Adam optimizer step size. Notebook: 0.0005.",
     },
     "batch_size": {
-        "label": "Batch size", "type": "int", "default": 32, "min": 1,
-        "help": "Training rows per weight update. Notebook: 32.",
+        "label": "Batch size", "type": "int", "default": 10, "min": 1,
+        "help": "Training rows per weight update. Notebook: 10.",
     },
     "alpha": {
-        "label": "Alpha (L2 penalty)", "type": "float", "default": 0.0001, "min": 0.0, "step": 0.0001, "format": "%.5f",
-        "help": "Penalty on the hidden layers' weights. Notebook: 0.0001.",
+        "label": "Alpha (L2 penalty)", "type": "float", "default": 0.001, "min": 0.0, "step": 0.0001, "format": "%.5f",
+        "help": "Penalty on the hidden layers' weights. Notebook: 0.001.",
     },
     "early_stopping": {
         "label": "Early stopping", "type": "bool", "default": True,
