@@ -5,12 +5,13 @@
 #   3.   Choose the test data (from the Test Data page, or an uploaded CSV with or without rent)
 #   4.   Choose the random seed (one for every model), a model, and its parameters, then fit and predict
 #   5.   Results: each property's Full Address with its predicted rent (in $), errors (when the test data
-#        has actual rent), column checkboxes, and a download
+#        has actual rent), column weights (linear models), column checkboxes, and a download
 #
 # Preparing the data and fitting happen in models/shared.py, the same way for every model.
 # The models are listed in models/__init__.py. Adding a model doesn't change this page.
 
 import hashlib
+import inspect
 import secrets
 
 import pandas as pd
@@ -317,6 +318,10 @@ def fit_and_save(choices):
         "model_name": choices["model_name"],
         "metrics": metrics,
         "details": fit["details"],
+        "column_weights": fit["column_weights"],
+        "target": target,
+        "run_id": secrets.token_hex(4),   # gives this run's widgets their own keys
+        "min_frequency": choices["min_frequency"],
         "summary": (
             f"From the last run: **{choices['model_name']}** ("
             + ", ".join(f"{model.PARAMETERS[name]['label']} = "
@@ -329,6 +334,89 @@ def fit_and_save(choices):
             f"Random seed: {seed} ({'typed in' if choices['typed_seed'] is not None else 'new random seed'})."
         ),
     }
+
+
+def show_column_weights(result):
+    """
+    Column weights (linear models only; models/shared.py works them out): how much each predictor column
+    moves the prediction, as a chart and table, then a closer look inside any one column.
+    """
+    import altair as alt
+
+    weights, target = result["column_weights"], result["target"]
+    overview = weights["overview"]
+    # Blank cells show a dash instead of "None" (the placeholder option only exists in newer Streamlit versions).
+    blank = {"placeholder": "—"} if "placeholder" in inspect.signature(st.dataframe).parameters else {}
+    coefficient = {"Coefficient (per 1 standard deviation)": st.column_config.NumberColumn(format="%.2f")}
+    st.subheader("Column weights")
+    st.caption(
+        f"How much each predictor column moves the predicted {target}. **Weight** is the typical size of everything "
+        "a column adds to a prediction: the standard deviation of its contribution across the training rows, in $. "
+        "For a numerical column that's its coefficient per 1 standard deviation; a categorical column's one-hot "
+        "columns are added together. Weights show what the model leans on, not cause and effect, and related "
+        "columns (like Yard Size and its log) can share or trade weight."
+    )
+
+    used = overview.loc[overview["Weight"] > 0]
+    if used.empty:
+        st.info("Every coefficient is 0, so no column moves the prediction.")
+    else:
+        # One series: bars in a single color (the Streamlit theme's light or dark step), largest first.
+        theme = getattr(getattr(st, "context", None), "theme", None)
+        color = "#3987e5" if getattr(theme, "type", None) == "dark" else "#2a78d6"
+        chart_data = used.rename(columns={"Share of total weight (%)": "Share"})
+        chart = alt.Chart(chart_data).mark_bar(color=color, size=18, cornerRadiusEnd=4).encode(
+            x=alt.X("Weight:Q", title=f"Weight (typical effect on {target}, $)", axis=alt.Axis(format="$,.0f", tickCount=6)),
+            y=alt.Y("Column:N", sort="-x", title=None),
+            tooltip=[alt.Tooltip("Column:N"), alt.Tooltip("Weight:Q", format="$,.2f"),
+                     alt.Tooltip("Share:Q", title="Share of total weight (%)", format=".1f"), alt.Tooltip("Direction:N")],
+        ).properties(height=max(120, 32 * len(chart_data)))
+        st.altair_chart(chart)
+
+    st.dataframe(overview, hide_index=True, **blank, column_config={
+        "Weight": st.column_config.NumberColumn(
+            format="dollar", help=f"Typical effect on the predicted {target}: the standard deviation of everything "
+                                  "this column adds, across the training rows."),
+        "Share of total weight (%)": st.column_config.NumberColumn(format="%.1f%%"),
+        "Effect of +1 unit": st.column_config.NumberColumn(
+            format="dollar", help=f"For a numerical or date column used once: how much the predicted {target} changes "
+                                  "when the column goes up by 1 (1 acre, 1 square foot, 1 day, ...), everything else "
+                                  "the same. Blank for categorical columns and columns in polynomial terms."),
+    })
+    st.download_button("Download column weights (CSV)", data=overview.round(4).to_csv(index=False).encode("utf-8"),
+                       file_name=f"column weights - {result['model_name']}.csv", mime="text/csv")
+
+    column = st.selectbox("Look inside one column", list(overview["Column"]), key=f"column weights: {result['run_id']}")
+    detail = weights["details"][column]
+    row = overview.loc[overview["Column"] == column].iloc[0]
+    if row["Direction"].startswith("Not used"):
+        st.info(f"The model doesn't use {column}: all of its coefficients are 0.")
+        return
+    if detail["type"] == "Categorical":
+        st.caption(
+            f"Each category's effect on the predicted {target}, everything else the same. Compare categories with "
+            f"each other: the gap between two categories is the predicted difference between them. Categories seen "
+            f"fewer than {result.get('min_frequency', 3)} times in training, and new categories in the test data, "
+            "count as \"unknown\"."
+        )
+        st.dataframe(detail["main"], hide_index=True, column_config={
+            **coefficient, "Effect of being in this category": st.column_config.NumberColumn(format="dollar")})
+    else:
+        if detail["other"] is not None:
+            st.caption(f"{column}'s own straight-line term. It's only part of the effect: {column} is also in the "
+                       "polynomial terms below.")
+        else:
+            st.caption(f"How much the predicted {target} changes when {column} goes up by 1, everything else the same"
+                       + (" (blank: numbers are scaled to 0-1 for this model)." if detail["main"]["Effect of +1 unit"].isna().all()
+                          else "."))
+        st.dataframe(detail["main"], hide_index=True, **blank, column_config={
+            **coefficient, "Effect of +1 unit": st.column_config.NumberColumn(format="dollar")})
+    if detail["other"] is not None:
+        st.write(f"**Polynomial terms that include {column}**")
+        st.caption("With polynomial terms, the column's effect also depends on the other columns in each term, so "
+                   "its own coefficient isn't the whole story. In the weight, each term is split between its columns "
+                   "by how much each one moves it away from the average property (Shapley values).")
+        st.dataframe(detail["other"], hide_index=True, column_config=coefficient)
 
 
 def show_results():
@@ -347,6 +435,8 @@ def show_results():
     if result["details"] is not None:
         with st.expander("Model details"):
             st.dataframe(result["details"], hide_index=True)
+    if result.get("column_weights") is not None:
+        show_column_weights(result)
 
     st.subheader("Columns to show")
     shown_columns = []
