@@ -6,7 +6,7 @@ Defaults: the lowest-RMSE alpha from your grid search, and the notebook's values
 
 import numpy as np
 
-from models.shared import coefficient_table
+from models.shared import coefficient_table, linear_terms
 
 NAME = "Lasso Regression"
 DESCRIPTION = (
@@ -39,7 +39,7 @@ PARAMETERS = {
 
 
 def fit_and_predict(X_train, y_train, X_test, random_state, alpha, max_iter, tol, selection):
-    """Returns (predictions, the predictors kept with their coefficients)."""
+    """Returns (predictions, the predictors kept with their coefficients, what each column adds for the column weights)."""
     # Model libraries load here, so a problem with one model's library can't affect the others.
     from sklearn.impute import SimpleImputer
     from sklearn.linear_model import Lasso
@@ -55,4 +55,4 @@ def fit_and_predict(X_train, y_train, X_test, random_state, alpha, max_iter, tol
 
     fitted = model[-1]
     predictions = np.asarray(model.predict(X_test), dtype=float).reshape(-1)
-    return predictions, coefficient_table(X_train.columns, fitted.coef_, fitted.intercept_)
+    return predictions, coefficient_table(X_train.columns, fitted.coef_, fitted.intercept_), linear_terms(model, X_train)

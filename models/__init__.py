@@ -33,6 +33,8 @@ OUTLINE: every model file has the same parts, in the same order
         ...                               # fit on X_train / y_train, using random_state as the seed
         return predictions                # one per X_test row, same order
                                           # (or return predictions, details_table to show a table under "Model details")
+                                          # (linear models: return predictions, details_table, linear_terms(model, X_train)
+                                          #  to also show "Column weights", where model is the fitted Pipeline)
 
 PARAMETER TYPES
   "int", "float"   a number box. Optional: "min", "max", "step", "format" (e.g. "%.4f", "%.1e"), "help"
@@ -52,7 +54,8 @@ receives it; a model with no randomness simply doesn't use it. Don't add a seed 
 """
 
 from models import (
-    best_subset_linear, best_subset_polynomial, gam, lasso, neural_network, neural_network_keras, pcr, pls, ridge,
+    bart, best_subset_linear, best_subset_polynomial, cat_boost, gam, lasso, light_gbm, neural_network,
+    neural_network_keras, pcr, pls, random_forest, ridge,
 )
 
 MODEL_FILES = [
@@ -65,6 +68,10 @@ MODEL_FILES = [
     gam,
     neural_network,
     neural_network_keras,
+    random_forest,
+    cat_boost,
+    light_gbm,
+    bart,
 ]
 
 MODELS = {model.NAME: model for model in MODEL_FILES}

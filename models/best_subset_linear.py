@@ -6,7 +6,7 @@ Defaults: the lowest-RMSE settings from your grid search.
 
 import numpy as np
 
-from models.shared import coefficient_table
+from models.shared import coefficient_table, linear_terms
 
 NAME = "Best Subset Linear Regression"
 DESCRIPTION = (
@@ -31,7 +31,7 @@ PARAMETERS = {
 
 
 def fit_and_predict(X_train, y_train, X_test, random_state, support_size, alpha):
-    """Returns (predictions, the predictors kept with their coefficients)."""
+    """Returns (predictions, the predictors kept with their coefficients, what each column adds for the column weights)."""
     # Model libraries load here, so a problem with one model's library can't affect the others.
     from abess.linear import LinearRegression as ABESSLinearRegression
     from sklearn.impute import SimpleImputer
@@ -52,4 +52,5 @@ def fit_and_predict(X_train, y_train, X_test, random_state, support_size, alpha)
     model.fit(X_train, np.asarray(y_train, dtype=float), model__is_normal=False)
 
     fitted = model.named_steps["model"]
-    return model.predict(X_test), coefficient_table(X_train.columns, fitted.coef_, fitted.intercept_)
+    return (model.predict(X_test), coefficient_table(X_train.columns, fitted.coef_, fitted.intercept_),
+            linear_terms(model, X_train))
