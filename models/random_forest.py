@@ -26,18 +26,18 @@ PARAMETERS = {
                 "Notebook: 500 (grid searched 50 to 1,000).",
     },
     "max_features": {
-        "label": "Share of predictors tried at each split", "type": "float", "default": 0.33,
+        "label": "Share of predictors tried at each split", "type": "float", "default": 1.0,
         "min": 0.01, "max": 1.0, "step": 0.01, "format": "%.2f",
         "help": "Lower values make the trees more different from each other; 1.0 tries every predictor. "
                 "Counts each one-hot column separately. Notebook: 0.33 (grid searched 0.05 to 1.0).",
     },
     "min_samples_leaf": {
-        "label": "Minimum rows per leaf", "type": "int", "default": 1, "min": 1,
+        "label": "Minimum rows per leaf", "type": "int", "default": 3, "min": 1,
         "help": "The smallest group a tree can end in. Higher values give smoother predictions. "
                 "Notebook: 1 (grid searched 1 to 20).",
     },
     "max_samples": {
-        "label": "Share of rows each tree trains on", "type": "float", "default": 1.0,
+        "label": "Share of rows each tree trains on", "type": "float", "default": None,
         "min": 0.01, "max": 1.0, "step": 0.05, "format": "%.2f",
         "help": "1.0 draws as many rows as the training data has (the notebook's None). Lower values make the "
                 "trees more different from each other. Notebook: None (grid searched 0.25 to 1.0).",
