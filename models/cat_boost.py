@@ -21,7 +21,7 @@ SEED_USED_FOR = "CatBoost's random row sampling and split scoring"
 
 PARAMETERS = {
     "depth": {
-        "label": "Tree depth", "type": "int", "default": 6, "min": 1, "max": 16,
+        "label": "Tree depth", "type": "int", "default": 5, "min": 1, "max": 16,
         "help": "Deeper trees capture more interactions between predictors but overfit more easily. "
                 "Notebook: 6 (grid searched 4 to 10).",
     },
@@ -38,7 +38,7 @@ PARAMETERS = {
                 "Notebook: 3 (grid searched 1, 3, 10).",
     },
     "iterations": {
-        "label": "Iterations (number of trees)", "type": "int", "default": 1000, "min": 1,
+        "label": "Iterations (number of trees)", "type": "int", "default": 750, "min": 1,
         "help": "Works with the learning rate: a lower rate needs more trees. "
                 "Notebook: 1,000 (grid searched 500 and 1,000).",
     },
